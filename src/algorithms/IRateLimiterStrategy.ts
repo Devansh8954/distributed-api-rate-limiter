@@ -1,0 +1,26 @@
+/**
+ * The result object every rate-limiting algorithm must return.
+ * Standardized so the middleware doesn't care which algorithm runs underneath.
+ */
+export interface RateLimiterResult {
+  allowed: boolean;        // true = let the request through
+  limit: number;           // configured max requests per window
+  remaining: number;       // how many requests the client has left
+  resetInSeconds: number;  // seconds until the window resets
+}
+
+/**
+ * Strategy Interface — the contract every algorithm must implement.
+ *
+ * This is the Strategy Design Pattern:
+ * - The middleware (Context) calls strategy.consume(key)
+ * - It doesn't know OR care if it's Fixed Window or Sliding Window
+ * - Swap algorithms by changing one line in server.ts (or an env var)
+ *
+ * Interview talking point:
+ * "I used the Strategy pattern so rate-limiting algorithms are pluggable
+ * without touching the middleware or any other business logic."
+ */
+export interface IRateLimiterStrategy {
+  consume(key: string): Promise<RateLimiterResult>;
+}
