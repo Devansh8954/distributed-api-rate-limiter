@@ -9,7 +9,7 @@ coverage/
 # The docs/ folder contains personal learning notes and interview Q&A.
 # To keep it PRIVATE (not pushed to GitHub), uncomment the line below:
 #
-# docs/
+docs/
 #
 # To make it private permanently:
 #   1. Uncomment "docs/" above
