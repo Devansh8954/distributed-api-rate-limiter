@@ -239,33 +239,11 @@ Expected: `200 200 200 200 200 200 200 200 200 200 429 429 429 429 429`
 ├── tests/
 │   ├── unit/                # Isolated algorithm tests
 │   └── integration/         # Full request flow tests
-├── docs/                    # Learning documentation
-│   ├── 01-getting-started.md
-│   ├── 02-system-architecture.md
-│   ├── 03-redis-explained.md
-│   ├── 04-rate-limiting-algorithms.md
-│   ├── 05-docker-explained.md
-│   ├── 06-gcp-deployment.md
-│   └── interview-qa.md
 ├── Dockerfile               # Multi-stage build
 └── docker-compose.yml       # Gateway + Redis + Redis UI
 ```
 
 ---
-
-## Documentation
-
-The `docs/` folder contains complete learning materials:
-
-| File | Contents |
-|---|---|
-| `01-getting-started.md` | Setup and running the project |
-| `02-system-architecture.md` | How all pieces fit together, design patterns |
-| `03-redis-explained.md` | Redis from scratch — data types, commands |
-| `04-rate-limiting-algorithms.md` | Fixed Window vs Sliding Window with diagrams |
-| `05-docker-explained.md` | Docker and Docker Compose from scratch |
-| `06-gcp-deployment.md` | Deploy to GCP Compute Engine step by step |
-| `interview-qa.md` | 14 interview questions with strong answers |
 
 ---
 
