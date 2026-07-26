@@ -8,21 +8,21 @@ A production-grade distributed API Gateway that protects backend services from D
 
 ## 🌐 Live Demo (Deployed on GCP)
 
-| Endpoint | Link |
-|---|---|
-| Health Check | http://136.115.81.182:3000/api/health |
-| Rate Limited API | http://136.115.81.182:3000/api/v1/data |
-| Prometheus Metrics | http://136.115.81.182:3000/metrics |
-| Redis Commander UI | http://136.115.81.182:8081 |
+**Try it now →** `http://136.115.81.182:3000/api/v1/data`
 
-**Test rate limiting live** — hit the API endpoint 11+ times and watch `429 Too Many Requests` kick in:
-```bash
-for i in {1..12}; do
-  echo -n "Request $i: "
-  curl -s -o /dev/null -w "%{http_code}\n" http://136.115.81.182:3000/api/v1/data
-done
-```
-Expected: `200 200 200 200 200 200 200 200 200 200 429 429`
+Hit that URL more than 10 times and watch it automatically block you with `429 Too Many Requests`.
+That's rate limiting — the same system Stripe, GitHub, and Google use to protect their APIs.
+
+<details>
+<summary>More endpoints</summary>
+
+| Endpoint | Description |
+|---|---|
+| `/api/health` | Health check — confirms Redis is connected |
+| `/metrics` | Prometheus metrics (for monitoring systems) |
+| `http://136.115.81.182:8081` | Redis Commander — visualize live rate-limit counters |
+
+</details>
 
 ---
 

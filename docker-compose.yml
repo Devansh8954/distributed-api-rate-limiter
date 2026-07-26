@@ -1,5 +1,3 @@
-version: '3.9'
-
 # All services communicate on this private network
 # They cannot be reached from outside except through published ports
 networks:
