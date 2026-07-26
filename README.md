@@ -2,7 +2,27 @@
 
 A production-grade distributed API Gateway that protects backend services from DDoS attacks and API abuse using Redis-backed rate limiting.
 
-[![CI Pipeline](https://github.com/YOUR_USERNAME/api-rate-limiter/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR_USERNAME/api-rate-limiter/actions)
+[![CI Pipeline](https://github.com/Devansh8954/distributed-api-rate-limiter/actions/workflows/ci.yml/badge.svg)](https://github.com/Devansh8954/distributed-api-rate-limiter/actions)
+
+---
+
+## 🌐 Live Demo (Deployed on GCP)
+
+| Endpoint | Link |
+|---|---|
+| Health Check | http://136.115.81.182:3000/api/health |
+| Rate Limited API | http://136.115.81.182:3000/api/v1/data |
+| Prometheus Metrics | http://136.115.81.182:3000/metrics |
+| Redis Commander UI | http://136.115.81.182:8081 |
+
+**Test rate limiting live** — hit the API endpoint 11+ times and watch `429 Too Many Requests` kick in:
+```bash
+for i in {1..12}; do
+  echo -n "Request $i: "
+  curl -s -o /dev/null -w "%{http_code}\n" http://136.115.81.182:3000/api/v1/data
+done
+```
+Expected: `200 200 200 200 200 200 200 200 200 200 429 429`
 
 ---
 
@@ -57,8 +77,8 @@ Client → Express Gateway → Rate Limiter Middleware → Redis
 **Prerequisites:** [Docker Desktop](https://www.docker.com/products/docker-desktop)
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/api-rate-limiter.git
-cd api-rate-limiter
+git clone https://github.com/Devansh8954/distributed-api-rate-limiter.git
+cd distributed-api-rate-limiter
 docker compose up --build
 ```
 
@@ -251,15 +271,16 @@ The `docs/` folder contains complete learning materials:
 
 ## GCP Deployment
 
-See `docs/06-gcp-deployment.md` for the full step-by-step guide.
+See `docs/production-deployment.md` for the full step-by-step guide.
 
-**Summary:**
+**Live instance running on:** GCP Compute Engine `us-central1-a` (e2-micro, always-free tier)
+
 ```bash
 # On your GCP VM after cloning the repo:
 docker compose up -d --build
 
 # Test from your local machine:
-curl http://YOUR_VM_IP:3000/api/health
+curl http://136.115.81.182:3000/api/health
 ```
 
 ---
