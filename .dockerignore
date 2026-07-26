@@ -13,4 +13,3 @@ tests
 README.md
 .eslintrc.js
 jest.config.ts
-tsconfig.json
