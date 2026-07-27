@@ -15,7 +15,7 @@ RUN npm ci --only=production
 FROM node:20-alpine AS builder
 WORKDIR /app
 
-COPY package*.json tsconfig.json ./
+COPY package*.json tsconfig*.json ./
 RUN npm ci                  # Need devDependencies for tsc
 
 COPY src/ ./src/

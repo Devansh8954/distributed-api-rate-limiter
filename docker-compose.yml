@@ -44,6 +44,10 @@ services:
       # Initial algorithm: 'fixed-window' | 'sliding-window' | 'token-bucket' | 'sliding-window-counter'
       # Can be changed live via POST /api/admin/config without restarting the container.
       - RATE_LIMIT_STRATEGY=fixed-window
+      # Admin API key — required to access /api/admin/* in production.
+      # Generate with: openssl rand -hex 32
+      # Leave blank to disable the admin plane (not recommended for demos).
+      - ADMIN_API_KEY=${ADMIN_API_KEY:-}
     networks:
       - gateway-net
     depends_on:

@@ -24,10 +24,7 @@ import { DynamicConfigService } from '../../src/services/dynamicConfig';
  */
 
 // ─── Mock Redis factory ───────────────────────────────────────────────────────
-// Only implements methods actually called by our code.
-// All other RedisClientType methods are irrelevant to our tests.
 function createMockRedisClient() {
-  // Shared in-memory state (reset between tests for isolation)
   const counters: Record<string, number> = {};
   const ttls:     Record<string, number> = {};
   const store:    Record<string, string> = {};
@@ -45,7 +42,7 @@ function createMockRedisClient() {
     }),
     ttl: jest.fn(async (key: string) => ttls[key] ?? 60),
 
-    // ── Token Bucket ──────────────────────────────────────────────────────────
+    // ── Token Bucket (now uses eval like Lua Counter) ─────────────────────────
     get: jest.fn(async (_key: string): Promise<string | null> => null),
     set: jest.fn(async (_key: string, _val: string): Promise<string | null> => 'OK'),
 
@@ -58,10 +55,8 @@ function createMockRedisClient() {
       return 1;
     }),
     multi: jest.fn(function buildPipeline() {
-      // Each call to multi() gets its own ops queue (like a real pipeline)
       const ops: Array<() => Promise<unknown>> = [];
 
-      // Explicitly typed to break the circular initializer reference (TS7022/TS7024)
       type MockPipeline = {
         zRemRangeByScore: jest.Mock;
         zCard: jest.Mock;
@@ -83,7 +78,7 @@ function createMockRedisClient() {
       return pipeline;
     }),
 
-    // ── Sliding Window Counter (Lua script) ───────────────────────────────────
+    // ── Sliding Window Counter + Token Bucket (Lua scripts) ───────────────────
     // Returns [allowed=1, limit=10, remaining=9, resetInSeconds=60]
     eval: jest.fn(async () => [1, 10, 9, 60]),
 
@@ -94,7 +89,7 @@ function createMockRedisClient() {
     // ── Health check ──────────────────────────────────────────────────────────
     ping: jest.fn(async () => 'PONG' as const),
 
-    // ── Test helper — call in beforeEach for clean isolation ──────────────────
+    // ── Test helper ───────────────────────────────────────────────────────────
     _reset(): void {
       for (const k of Object.keys(counters)) delete counters[k];
       for (const k of Object.keys(ttls))     delete ttls[k];
@@ -105,9 +100,6 @@ function createMockRedisClient() {
   };
 }
 
-// Helper: cast our slim mock to RedisClientType without fighting every method signature.
-// We cast to `unknown` first (allowed by TS) then to the target type.
-// This is the standard TypeScript pattern for test mocks of complex external types.
 function asRedis(mock: ReturnType<typeof createMockRedisClient>): RedisClientType {
   return mock as unknown as RedisClientType;
 }
@@ -117,14 +109,14 @@ function asRedis(mock: ReturnType<typeof createMockRedisClient>): RedisClientTyp
 describe('Rate Limiter Integration', () => {
   let app: express.Application;
   let mockRedis: ReturnType<typeof createMockRedisClient>;
+  // Hoisted so tests that need to inspect or mutate config can access it
+  let dynamicConfigService: DynamicConfigService;
 
   beforeEach(() => {
     mockRedis = createMockRedisClient();
-    // _reset is called inside createMockRedisClient, but explicit call guards
-    // against state leakage if tests are run in an unexpected order
     mockRedis._reset();
 
-    const dynamicConfigService = new DynamicConfigService(asRedis(mockRedis));
+    dynamicConfigService = new DynamicConfigService(asRedis(mockRedis));
     const rateLimiter = createRateLimiterMiddleware(dynamicConfigService);
 
     app = express();
@@ -158,9 +150,7 @@ describe('Rate Limiter Integration', () => {
         statuses.push(res.status);
       }
 
-      // Requests 1–10 must all be 200 OK
       expect(statuses.slice(0, 10).every((s) => s === 200)).toBe(true);
-      // Request 11 must be blocked
       expect(statuses[10]).toBe(429);
     });
 
@@ -189,6 +179,86 @@ describe('Rate Limiter Integration', () => {
         const res = await request(app).get('/api/health');
         expect(res.status).toBe(200);
       }
+    });
+  });
+
+  // ── Tier-based rate limiting ─────────────────────────────────────────────────
+
+  describe('Tier-based rate limiting', () => {
+    it('should return X-RateLimit-Tier: Free Tier for unauthenticated requests', async () => {
+      const res = await request(app).get('/api/v1/data');
+      expect(res.headers['x-ratelimit-tier']).toBe('Free Tier');
+    });
+
+    it('should apply Pro Tier label when x-client-tier: pro header is sent', async () => {
+      const res = await request(app).get('/api/v1/data').set('x-client-tier', 'pro');
+      // Pro tier has a 60 req/min limit — mock incr returns 1 so it's allowed
+      expect(res.status).toBe(200);
+      expect(res.headers['x-ratelimit-tier']).toBe('Pro Tier');
+    });
+
+    it('should block Pro Tier request when incr exceeds 60 req/min limit', async () => {
+      // Mock incr to return 61 — over the Pro tier limit
+      mockRedis.incr.mockResolvedValue(61);
+      mockRedis.ttl.mockResolvedValue(30);
+
+      const res = await request(app).get('/api/v1/data').set('x-client-tier', 'pro');
+      expect(res.status).toBe(429);
+      expect(res.body.tier).toBe('Pro Tier');
+    });
+
+    it('should apply Enterprise Tier label when x-client-tier: enterprise header is sent', async () => {
+      const res = await request(app).get('/api/v1/data').set('x-client-tier', 'enterprise');
+      expect(res.status).toBe(200);
+      expect(res.headers['x-ratelimit-tier']).toBe('Enterprise Tier');
+    });
+  });
+
+  // ── Runtime strategy switching ───────────────────────────────────────────────
+
+  describe('Runtime strategy switching', () => {
+    it('should report fixed-window strategy in headers by default', async () => {
+      const res = await request(app).get('/api/v1/data');
+      expect(res.headers['x-ratelimit-strategy']).toBe('fixed-window');
+    });
+
+    it('should immediately use new strategy after updateActiveStrategy() — no restart needed', async () => {
+      dynamicConfigService.updateActiveStrategy('sliding-window-counter');
+
+      // eval mock returns [1, 10, 9, 60] → allowed
+      const res = await request(app).get('/api/v1/data');
+      expect(res.status).toBe(200);
+      expect(res.headers['x-ratelimit-strategy']).toBe('sliding-window-counter');
+    });
+
+    it('should use sliding-window strategy when switched', async () => {
+      dynamicConfigService.updateActiveStrategy('sliding-window');
+
+      const res = await request(app).get('/api/v1/data');
+      expect(res.status).toBe(200);
+      expect(res.headers['x-ratelimit-strategy']).toBe('sliding-window');
+    });
+  });
+
+  // ── Fail-open behavior ───────────────────────────────────────────────────────
+
+  describe('Fail-open behavior', () => {
+    it('should return 200 (fail open) when the active strategy throws a Redis error', async () => {
+      const { strategy } = dynamicConfigService.getActiveStrategy();
+      jest.spyOn(strategy, 'consume').mockRejectedValueOnce(new Error('Redis connection lost'));
+
+      // Even though the rate limiter threw, the middleware must let the request through
+      const res = await request(app).get('/api/v1/data');
+      expect(res.status).toBe(200);
+    });
+
+    it('should NOT set X-RateLimit-* headers on fail-open requests', async () => {
+      const { strategy } = dynamicConfigService.getActiveStrategy();
+      jest.spyOn(strategy, 'consume').mockRejectedValueOnce(new Error('Redis down'));
+
+      const res = await request(app).get('/api/v1/data');
+      // Headers are set before next() is called — they won't exist on fail-open path
+      expect(res.headers['x-ratelimit-remaining']).toBeUndefined();
     });
   });
 });

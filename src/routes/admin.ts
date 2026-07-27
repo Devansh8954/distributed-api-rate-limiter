@@ -87,13 +87,30 @@ export function createAdminRouter(
     };
 
     if (strategy) {
+      if (!['fixed-window', 'sliding-window', 'token-bucket', 'sliding-window-counter'].includes(strategy)) {
+        res.status(400).json({ error: `Invalid strategy '${strategy}'. Must be one of: fixed-window, sliding-window, token-bucket, sliding-window-counter.` });
+        return;
+      }
       dynamicConfigService.updateActiveStrategy(strategy);
       logger.info('Rate limiting strategy changed', { newStrategy: strategy });
     }
 
-    if (typeof limit === 'number' && typeof windowSeconds === 'number') {
-      dynamicConfigService.updateGlobalDefaults(limit, windowSeconds);
-      logger.info('Rate limit defaults updated', { limit, windowSeconds });
+    if (limit !== undefined || windowSeconds !== undefined) {
+      const parsedLimit   = Number(limit);
+      const parsedWindow  = Number(windowSeconds);
+
+      if (
+        !Number.isFinite(parsedLimit)  || parsedLimit  < 1  || parsedLimit  > 100_000 ||
+        !Number.isFinite(parsedWindow) || parsedWindow < 1  || parsedWindow > 86_400
+      ) {
+        res.status(400).json({
+          error: 'Invalid limit or windowSeconds. limit must be 1–100000, windowSeconds must be 1–86400.',
+        });
+        return;
+      }
+
+      dynamicConfigService.updateGlobalDefaults(parsedLimit, parsedWindow);
+      logger.info('Rate limit defaults updated', { limit: parsedLimit, windowSeconds: parsedWindow });
     }
 
     const { name: activeStrategy } = dynamicConfigService.getActiveStrategy();

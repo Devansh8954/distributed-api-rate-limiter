@@ -1,9 +1,11 @@
 import express from 'express';
+import helmet from 'helmet';
 import path from 'path';
 import config from './config';
 import { getRedisClient, closeRedisConnection } from './services/redisClient';
 import { DynamicConfigService } from './services/dynamicConfig';
 import { createRateLimiterMiddleware } from './middleware/rateLimiter';
+import { adminAuth } from './middleware/adminAuth';
 import { createApiRouter } from './routes/api';
 import { createAdminRouter } from './routes/admin';
 import metricsRouter from './routes/metrics';
@@ -12,9 +14,14 @@ import logger from './utils/logger';
 async function bootstrap() {
   const app = express();
 
+  // Security headers (X-Frame-Options, CSP, HSTS, etc.)
+  app.use(helmet());
+
   // Trust proxy headers for load balancers / cloud VMs
   app.set('trust proxy', 1);
-  app.use(express.json());
+
+  // Limit request body size to prevent memory exhaustion from oversized payloads
+  app.use(express.json({ limit: '10kb' }));
 
   // Serve Dashboard UI (static files)
   const publicPath = path.join(__dirname, '../public');
@@ -39,7 +46,7 @@ async function bootstrap() {
 
   // --- Mount Admin & Unprotected Routes ---
   app.use('/metrics', metricsRouter);
-  app.use('/api/admin', createAdminRouter(redisClient, dynamicConfigService));
+  app.use('/api/admin', adminAuth, createAdminRouter(redisClient, dynamicConfigService));
 
   // Health check endpoint (Unprotected)
   app.use('/api', createApiRouter(redisClient));
@@ -85,6 +92,6 @@ async function bootstrap() {
 }
 
 bootstrap().catch((err) => {
-  console.error('Failed to bootstrap server:', err);
+  logger.error('Failed to bootstrap server', { error: (err as Error).message });
   process.exit(1);
 });

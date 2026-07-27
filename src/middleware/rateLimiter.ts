@@ -36,7 +36,7 @@ export function createRateLimiterMiddleware(dynamicConfigService: DynamicConfigS
       const telemetry = TelemetryService.getInstance();
       const event = {
         id: uuidv4(),
-        timestamp: new Date().toLocaleTimeString(),
+        timestamp: new Date().toISOString(),
         ip: clientIp,
         tier: tierConfig.name,
         endpoint: req.originalUrl || req.url,

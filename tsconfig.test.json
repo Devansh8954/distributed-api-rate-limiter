@@ -3,7 +3,7 @@
 
   // Extends the main config so we share all compilerOptions.
   // Only adds what tests need on top.
-  "extends": "./tsconfig.json",
+  "extends": "./tsconfig.build.json",
 
   "compilerOptions": {
     // Tests don't emit compiled output — they run via ts-jest directly

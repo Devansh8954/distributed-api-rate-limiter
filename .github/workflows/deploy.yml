@@ -1,0 +1,158 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# CD: Deploy to GCP Cloud Run
+#
+# Trigger: Fires ONLY after the CI Pipeline succeeds on `main`.
+#          This guarantees: lint + test + Docker smoke-test must all pass
+#          before a single byte reaches production.
+#
+# Auth: Uses Workload Identity Federation (WIF) — the modern GCP keyless approach.
+#       No service-account JSON keys are stored anywhere. GitHub's OIDC token is
+#       exchanged directly with GCP for a short-lived credential. Zero long-lived secrets.
+#
+# Infrastructure:
+#   - Image registry : GCP Artifact Registry
+#   - Runtime        : Cloud Run (serverless, scales to 0 when idle)
+#   - Redis          : Set REDIS_URL secret to Upstash / Redis Cloud / Memorystore URL
+#
+# Required GitHub Secrets (repo → Settings → Secrets → Actions):
+#   GCP_PROJECT_ID       Your GCP project ID (e.g. "my-project-123456")
+#   GCP_WIF_PROVIDER     Workload Identity Provider resource name
+#                        e.g. projects/123/locations/global/workloadIdentityPools/github/providers/github
+#   GCP_WIF_SA           Service Account email that WIF will impersonate
+#                        e.g. github-deployer@my-project.iam.gserviceaccount.com
+#   REDIS_URL            Redis connection string — Upstash / Redis Cloud / Memorystore
+#                        e.g. redis://default:password@hostname:6379
+#   ADMIN_API_KEY        Secret key for /api/admin/* endpoints
+#                        Generate: openssl rand -hex 32
+# ─────────────────────────────────────────────────────────────────────────────
+name: Deploy to GCP Cloud Run
+
+on:
+  # Only deploy after the full CI pipeline passes on main
+  workflow_run:
+    workflows: ["CI Pipeline"]
+    types: [completed]
+    branches: [main]
+
+  # Manual trigger — useful for re-deploying a hotfix without a new commit
+  workflow_dispatch:
+
+# ─── Shared environment variables ────────────────────────────────────────────
+env:
+  PROJECT_ID:   ${{ secrets.GCP_PROJECT_ID }}
+  REGION:       asia-south1                   # Mumbai — closest to India
+  SERVICE:      api-rate-limiter
+  REGISTRY:     asia-south1-docker.pkg.dev
+  REPO:         api-rate-limiter               # Artifact Registry repository name
+  IMAGE:        asia-south1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/api-rate-limiter/gateway
+
+jobs:
+  # ─── Gate: only proceed if CI passed (not skipped or failed) ─────────────
+  check-ci:
+    name: Verify CI passed
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    steps:
+      - name: CI status OK
+        run: echo "CI pipeline passed — proceeding to deploy"
+
+  # ─── Job: Build → Push → Deploy ──────────────────────────────────────────
+  deploy:
+    name: Build & Deploy
+    runs-on: ubuntu-latest
+    needs: check-ci
+    permissions:
+      contents: read
+      id-token: write   # Required for Workload Identity Federation OIDC exchange
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      # ── Keyless GCP authentication via Workload Identity Federation ────────
+      # No JSON key stored in GitHub. GitHub's OIDC token is exchanged directly
+      # with GCP IAM for a short-lived credential scoped to this job only.
+      - name: Authenticate to GCP (WIF — keyless)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account:            ${{ secrets.GCP_WIF_SA }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      # ── Docker → Artifact Registry ─────────────────────────────────────────
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGISTRY }} --quiet
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            --tag "${{ env.IMAGE }}:${{ github.sha }}" \
+            --tag "${{ env.IMAGE }}:latest" \
+            --label "git-commit=${{ github.sha }}" \
+            --label "git-ref=${{ github.ref_name }}" \
+            .
+
+      - name: Push image to Artifact Registry
+        run: |
+          docker push "${{ env.IMAGE }}:${{ github.sha }}"
+          docker push "${{ env.IMAGE }}:latest"
+
+      # ── Deploy to Cloud Run ────────────────────────────────────────────────
+      # Pin image to the exact SHA — never deploy `latest` to production.
+      # This makes every deployment 100% reproducible and rollback-safe.
+      - name: Deploy to Cloud Run
+        id: deploy
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service:    ${{ env.SERVICE }}
+          region:     ${{ env.REGION }}
+          image:      ${{ env.IMAGE }}:${{ github.sha }}
+          env_vars: |
+            NODE_ENV=production
+            RATE_LIMIT=100
+            WINDOW_SECONDS=60
+            RATE_LIMIT_STRATEGY=sliding-window-counter
+          secrets: |
+            REDIS_URL=REDIS_URL:latest
+            ADMIN_API_KEY=ADMIN_API_KEY:latest
+          flags: |
+            --allow-unauthenticated
+            --min-instances=0
+            --max-instances=10
+            --memory=256Mi
+            --cpu=1
+            --port=3000
+            --concurrency=80
+            --timeout=30s
+
+      # ── Post-deploy smoke test ─────────────────────────────────────────────
+      # Hits the health check endpoint on the live Cloud Run URL.
+      # If this fails, the pipeline fails and the bad deploy is flagged immediately.
+      - name: Smoke test — health check
+        run: |
+          echo "Service URL: ${{ steps.deploy.outputs.url }}"
+          curl --fail --retry 5 --retry-delay 3 --retry-connrefused \
+            "${{ steps.deploy.outputs.url }}/api/health" \
+            | grep -q '"status":"ok"' \
+            && echo "✅ Health check passed" \
+            || (echo "❌ Health check failed" && exit 1)
+
+      # ── Print deployment summary ───────────────────────────────────────────
+      - name: Print deployment summary
+        run: |
+          echo "### ✅ Deployment Successful" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Service** | ${{ env.SERVICE }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Region** | ${{ env.REGION }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Image SHA** | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Dashboard** | ${{ steps.deploy.outputs.url }}/dashboard |" >> $GITHUB_STEP_SUMMARY
+          echo "| **API** | ${{ steps.deploy.outputs.url }}/api/v1/data |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Metrics** | ${{ steps.deploy.outputs.url }}/metrics |" >> $GITHUB_STEP_SUMMARY

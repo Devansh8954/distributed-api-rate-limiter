@@ -5,7 +5,7 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "nodemon --exec ts-node src/server.ts",
-    "build": "tsc",
+    "build": "tsc -p tsconfig.build.json",
     "start": "node dist/server.js",
     "test": "jest --forceExit",
     "test:unit": "jest tests/unit --forceExit",
@@ -14,12 +14,19 @@
     "lint": "eslint \"src/**/*.ts\" \"tests/**/*.ts\"",
     "lint:fix": "eslint \"src/**/*.ts\" \"tests/**/*.ts\" --fix"
   },
-  "keywords": ["rate-limiter", "api-gateway", "redis", "express", "typescript"],
+  "keywords": [
+    "rate-limiter",
+    "api-gateway",
+    "redis",
+    "express",
+    "typescript"
+  ],
   "author": "",
   "license": "MIT",
   "dependencies": {
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
+    "helmet": "^8.3.0",
     "prom-client": "^15.1.0",
     "redis": "^4.6.10",
     "uuid": "^9.0.0",
