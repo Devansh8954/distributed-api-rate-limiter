@@ -1,5 +1,5 @@
-# All services communicate on this private network
-# They cannot be reached from outside except through published ports
+# All services communicate on a private isolated Docker network.
+# They cannot be reached from outside except through explicitly published ports.
 networks:
   gateway-net:
     driver: bridge
@@ -7,16 +7,17 @@ networks:
 services:
 
   # ─── Redis ────────────────────────────────────────────────────────────────
+  # redis-stack image includes both Redis and the RedisInsight web UI on port 8001
   redis:
     image: redis/redis-stack:latest
     container_name: rate-limiter-redis
     ports:
-      - "6379:6379"   # Redis protocol
-      - "8001:8001"   # RedisInsight web UI (built into redis-stack image)
+      - "6379:6379"   # Redis protocol (clients connect here)
+      - "8001:8001"   # RedisInsight web UI — visualise rate-limit keys in real time
     networks:
       - gateway-net
     volumes:
-      - redis-data:/data  # Persist data across container restarts
+      - redis-data:/data  # Named volume — data persists across container restarts
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -25,6 +26,7 @@ services:
       start_period: 10s
 
   # ─── API Gateway ──────────────────────────────────────────────────────────
+  # This is the Express app. It is only started AFTER Redis passes its healthcheck.
   gateway:
     build:
       context: .
@@ -34,22 +36,24 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=production
-      # Inside Docker, use the service name "redis" as the hostname
-      # Docker's internal DNS resolves "redis" → the redis container's IP
+      # Inside Docker Compose, services communicate by service name, not localhost.
+      # Docker's internal DNS resolves "redis" → the Redis container's IP automatically.
       - REDIS_URL=redis://redis:6379
       - RATE_LIMIT=10
       - WINDOW_SECONDS=60
+      # Initial algorithm: 'fixed-window' | 'sliding-window' | 'token-bucket' | 'sliding-window-counter'
+      # Can be changed live via POST /api/admin/config without restarting the container.
       - RATE_LIMIT_STRATEGY=fixed-window
     networks:
       - gateway-net
     depends_on:
       redis:
-        condition: service_healthy   # Wait until Redis passes its health check
-    restart: unless-stopped
+        condition: service_healthy   # Waits until Redis passes its healthcheck above
+    restart: unless-stopped         # Auto-restarts on crash, but not manual docker stop
 
   # ─── Redis Commander (Web UI) ──────────────────────────────────────────────
-  # Visit http://localhost:8081 to visually inspect Redis keys in real time
-  # Watch rate-limit counters being created and expiring as you test!
+  # Open http://localhost:8081 to visually browse and inspect Redis keys.
+  # You can watch rate-limit counters being created, incremented, and expiring in real time.
   redis-commander:
     image: rediscommander/redis-commander:latest
     container_name: rate-limiter-ui
@@ -63,4 +67,4 @@ services:
       - redis
 
 volumes:
-  redis-data:  # Named volume — data survives "docker compose down"
+  redis-data:  # Named volume — data survives "docker compose down" but NOT "docker compose down -v"

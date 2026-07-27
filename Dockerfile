@@ -32,9 +32,10 @@ WORKDIR /app
 RUN addgroup --system appgroup \
     && adduser --system --ingroup appgroup appuser
 
-# Copy only the compiled output and prod dependencies from previous stages
+# Copy only the compiled output, prod dependencies, and static UI files
 COPY --from=deps     /app/node_modules ./node_modules
 COPY --from=builder  /app/dist         ./dist
+COPY                 public/           ./public
 COPY                 package.json      ./
 
 USER appuser
