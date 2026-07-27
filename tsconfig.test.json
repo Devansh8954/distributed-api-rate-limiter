@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+
+  // Extends the main config so we share all compilerOptions.
+  // Only adds what tests need on top.
+  "extends": "./tsconfig.json",
+
+  "compilerOptions": {
+    // Tests don't emit compiled output — they run via ts-jest directly
+    "noEmit": true,
+
+    // Remove rootDir restriction so both src/ and tests/ can coexist
+    "rootDir": ".",
+
+    // Register @types/jest so VS Code knows about describe(), it(), expect(), jest.*
+    // Without this, every Jest global shows as "Cannot find name 'describe'" (red underline)
+    "types": ["jest", "node"]
+  },
+
+  // Include BOTH src and tests so cross-imports (e.g. ../../src/algorithms/...) resolve cleanly
+  "include": ["src/**/*", "tests/**/*"],
+
+  "exclude": ["node_modules", "dist"]
+}
