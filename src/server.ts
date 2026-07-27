@@ -5,7 +5,6 @@ import config from './config';
 import { getRedisClient, closeRedisConnection } from './services/redisClient';
 import { DynamicConfigService } from './services/dynamicConfig';
 import { createRateLimiterMiddleware } from './middleware/rateLimiter';
-import { adminAuth } from './middleware/adminAuth';
 import { createApiRouter } from './routes/api';
 import { createAdminRouter } from './routes/admin';
 import metricsRouter from './routes/metrics';
@@ -46,7 +45,7 @@ async function bootstrap() {
 
   // --- Mount Admin & Unprotected Routes ---
   app.use('/metrics', metricsRouter);
-  app.use('/api/admin', adminAuth, createAdminRouter(redisClient, dynamicConfigService));
+  app.use('/api/admin', createAdminRouter(redisClient, dynamicConfigService));
 
   // Health check endpoint (Unprotected)
   app.use('/api', createApiRouter(redisClient));
