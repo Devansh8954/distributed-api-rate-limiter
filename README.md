@@ -6,10 +6,10 @@ A production-grade distributed API Gateway and real-time visual control platform
 
 ---
 
-## 🌐 Live Demo & Interactive Dashboard (Deployed on GCP)
+## 🌐 Live Demo & Interactive Dashboard (Deployed on GCP Cloud Run)
 
-**Control Center Dashboard →** `http://136.115.81.182:3000/dashboard`
-**Protected API Endpoint →** `http://136.115.81.182:3000/api/v1/data`
+**Control Center Dashboard →** `https://api-rate-limiter-266670750120.asia-south1.run.app/dashboard`
+**Protected API Endpoint →** `https://api-rate-limiter-266670750120.asia-south1.run.app/api/v1/data`
 
 * Open the dashboard to launch synthetic request bursts (e.g. 50 req/sec), watch live visual charts block requests in `429 Too Many Requests`, inspect Redis keys and TTLs in real-time, and switch rate-limiting algorithms on the fly!
 
