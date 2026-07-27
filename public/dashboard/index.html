@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>API Gateway & Distributed Rate Limiter Control Center</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #090d16;
+      --card-bg: rgba(18, 26, 44, 0.75);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --primary: #6366f1;
+      --primary-glow: rgba(99, 102, 241, 0.35);
+      --accent-cyan: #06b6d4;
+      --success: #10b981;
+      --success-glow: rgba(16, 185, 129, 0.3);
+      --danger: #ef4444;
+      --danger-glow: rgba(239, 68, 68, 0.3);
+      --warning: #f59e0b;
+      --text-main: #f3f4f6;
+      --text-muted: #9ca3af;
+      --font-sans: 'Inter', system-ui, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.12) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(6, 182, 212, 0.1) 0px, transparent 50%);
+      color: var(--text-main);
+      font-family: var(--font-sans);
+      min-height: 100vh;
+      padding: 2rem;
+      line-height: 1.5;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 1.75rem;
+    }
+
+    /* --- Header --- */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1.5rem 2rem;
+      background: var(--card-bg);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    }
+
+    .logo-group {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .logo-icon {
+      width: 44px;
+      height: 44px;
+      background: linear-gradient(135deg, var(--primary), var(--accent-cyan));
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 1.25rem;
+      box-shadow: 0 0 20px var(--primary-glow);
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .subtitle {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    .status-badge {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.4rem 0.9rem;
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid var(--success);
+      color: var(--success);
+      border-radius: 9999px;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      background-color: var(--success);
+      border-radius: 50%;
+      box-shadow: 0 0 10px var(--success);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(1.2); }
+      100% { opacity: 1; transform: scale(1); }
+    }
+
+    /* --- Stats Grid --- */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1.25rem;
+    }
+
+    .stat-card {
+      background: var(--card-bg);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--card-border);
+      padding: 1.25rem 1.5rem;
+      border-radius: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .stat-label {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-weight: 600;
+    }
+
+    .stat-value {
+      font-size: 2rem;
+      font-weight: 800;
+      font-family: var(--font-mono);
+    }
+
+    .val-allowed { color: var(--success); text-shadow: 0 0 15px var(--success-glow); }
+    .val-blocked { color: var(--danger); text-shadow: 0 0 15px var(--danger-glow); }
+    .val-active { color: var(--accent-cyan); }
+
+    /* --- Main Layout Grid --- */
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 1.5rem;
+    }
+
+    @media (max-width: 1024px) {
+      .dashboard-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .card {
+      background: var(--card-bg);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+
+    .card-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    /* --- Strategy Cards --- */
+    .strategy-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+    }
+
+    .strategy-btn {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 1rem;
+      color: var(--text-main);
+      cursor: pointer;
+      text-align: left;
+      transition: all 0.2s ease;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .strategy-btn:hover {
+      background: rgba(99, 102, 241, 0.1);
+      border-color: var(--primary);
+    }
+
+    .strategy-btn.active {
+      background: linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(6, 182, 212, 0.15));
+      border: 1.5px solid var(--primary);
+      box-shadow: 0 0 15px var(--primary-glow);
+    }
+
+    .strategy-name {
+      font-weight: 700;
+      font-size: 0.95rem;
+    }
+
+    .strategy-desc {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    /* --- Simulator Controls --- */
+    .simulator-panel {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      align-items: center;
+    }
+
+    .btn {
+      background: var(--primary);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      padding: 0.7rem 1.25rem;
+      font-weight: 600;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      box-shadow: 0 4px 12px var(--primary-glow);
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+      filter: brightness(1.1);
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.08);
+      box-shadow: none;
+      border: 1px solid var(--card-border);
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    .btn-danger {
+      background: var(--danger);
+      box-shadow: 0 4px 12px var(--danger-glow);
+    }
+
+    select, input {
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid var(--card-border);
+      color: var(--text-main);
+      padding: 0.6rem 0.9rem;
+      border-radius: 8px;
+      font-family: var(--font-sans);
+      font-size: 0.85rem;
+    }
+
+    /* --- Canvas Chart --- */
+    .chart-container {
+      width: 100%;
+      height: 240px;
+      position: relative;
+    }
+
+    canvas {
+      width: 100% !important;
+      height: 100% !important;
+    }
+
+    /* --- Logs & Key Tables --- */
+    .table-container {
+      overflow-x: auto;
+      max-height: 280px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.825rem;
+      font-family: var(--font-mono);
+    }
+
+    th {
+      text-align: left;
+      padding: 0.6rem 0.8rem;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--card-border);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+    }
+
+    td {
+      padding: 0.6rem 0.8rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    }
+
+    .tag {
+      padding: 0.2rem 0.5rem;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+
+    .tag-200 { background: rgba(16, 185, 129, 0.2); color: var(--success); }
+    .tag-429 { background: rgba(239, 68, 68, 0.2); color: var(--danger); }
+    .tag-tier { background: rgba(99, 102, 241, 0.2); color: var(--primary); }
+
+    /* Flex helpers */
+    .flex-row { display: flex; align-items: center; gap: 0.75rem; }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    
+    <!-- Top Header -->
+    <header>
+      <div class="logo-group">
+        <div class="logo-icon">⚡</div>
+        <div>
+          <h1>API Gateway & Rate Limiter Control Center</h1>
+          <div class="subtitle">Distributed Redis-backed Traffic Management Platform</div>
+        </div>
+      </div>
+
+      <div class="status-badge">
+        <span class="status-dot"></span>
+        <span>GATEWAY ACTIVE</span>
+      </div>
+    </header>
+
+    <!-- Metrics Summary Bar -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <span class="stat-label">Active Algorithm</span>
+        <span class="stat-value val-active" id="stat-strategy">Loading...</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Allowed Requests (200 OK)</span>
+        <span class="stat-value val-allowed" id="stat-allowed">0</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Blocked Requests (429 Blocked)</span>
+        <span class="stat-value val-blocked" id="stat-blocked">0</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Block Rate %</span>
+        <span class="stat-value" id="stat-block-rate">0%</span>
+      </div>
+    </div>
+
+    <!-- Main Content Area -->
+    <div class="dashboard-grid">
+
+      <!-- Left Column: Strategy Selector, Traffic Simulator, Live Chart -->
+      <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+        
+        <!-- Algorithm Switcher Card -->
+        <div class="card">
+          <div class="card-title">
+            <span>⚙️ Dynamic Rate Limiting Algorithms</span>
+            <span style="font-size: 0.8rem; color: var(--text-muted);">Runtime strategy hot-swap</span>
+          </div>
+
+          <div class="strategy-cards" id="strategy-container">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+
+        <!-- Live Traffic Simulator Card -->
+        <div class="card">
+          <div class="card-title">
+            <span>🚀 Interactive Traffic Simulator</span>
+            <span style="font-size: 0.8rem; color: var(--text-muted);">Trigger synthetic request bursts</span>
+          </div>
+
+          <div class="simulator-panel">
+            <label style="font-size: 0.85rem; color: var(--text-muted);">Target Tier:</label>
+            <select id="sim-tier">
+              <option value="free">Free Tier (10 req/min limit)</option>
+              <option value="pro">Pro Tier (60 req/min limit)</option>
+              <option value="enterprise">Enterprise Tier (300 req/min limit)</option>
+            </select>
+
+            <button class="btn" onclick="triggerBurst(20)">💥 Burst 20 Requests</button>
+            <button class="btn" onclick="triggerBurst(50)">🔥 Burst 50 Requests</button>
+            <button class="btn btn-secondary" id="auto-loop-btn" onclick="toggleAutoLoop()">🔄 Auto Loop Traffic (OFF)</button>
+          </div>
+        </div>
+
+        <!-- Real-Time Throughput Chart -->
+        <div class="card">
+          <div class="card-title">
+            <span>📈 Real-Time Request Throughput</span>
+            <span style="font-size: 0.8rem; color: var(--text-muted);"><span style="color: var(--success)">■ Allowed</span> vs <span style="color: var(--danger)">■ Blocked</span></span>
+          </div>
+
+          <div class="chart-container">
+            <canvas id="throughputChart"></canvas>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Right Column: Redis Key Inspector & Live Log -->
+      <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+        
+        <!-- Redis Key Inspector Card -->
+        <div class="card">
+          <div class="card-title">
+            <span>🔑 Redis Key & Memory Inspector</span>
+            <button class="btn btn-secondary" style="padding: 0.3rem 0.6rem; font-size: 0.75rem;" onclick="fetchRedisKeys()">Refresh Keys</button>
+          </div>
+
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Redis Key</th>
+                  <th>Value / Count</th>
+                  <th>TTL (s)</th>
+                </tr>
+              </thead>
+              <tbody id="redis-keys-body">
+                <tr><td colspan="3" style="color: var(--text-muted);">No active rate limit keys</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Live Telemetry Request Log -->
+        <div class="card">
+          <div class="card-title">
+            <span>📡 Live Request Log</span>
+            <span style="font-size: 0.75rem; color: var(--text-muted);" id="log-count">0 events</span>
+          </div>
+
+          <div class="table-container" style="max-height: 380px;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Status</th>
+                  <th>Tier</th>
+                  <th>Reset</th>
+                </tr>
+              </thead>
+              <tbody id="log-body">
+                <tr><td colspan="3" style="color: var(--text-muted);">Waiting for traffic...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+  </div>
+
+  <script>
+    // State
+    let allowedCount = 0;
+    let blockedCount = 0;
+    let autoLoopInterval = null;
+
+    // Canvas Chart setup
+    const canvas = document.getElementById('throughputChart');
+    const ctx = canvas.getContext('2d');
+    let chartDataAllowed = new Array(30).fill(0);
+    let chartDataBlocked = new Array(30).fill(0);
+
+    function resizeCanvas() {
+      canvas.width = canvas.parentElement.clientWidth;
+      canvas.height = canvas.parentElement.clientHeight;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    function drawChart() {
+      const w = canvas.width;
+      const h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
+
+      const maxVal = Math.max(10, ...chartDataAllowed, ...chartDataBlocked);
+      const stepX = w / (chartDataAllowed.length - 1);
+
+      // Grid lines
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+      ctx.lineWidth = 1;
+      for (let y = 0; y <= h; y += h / 4) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(w, y);
+        ctx.stroke();
+      }
+
+      // Draw Line Allowed (Green)
+      drawLine(chartDataAllowed, '#10b981', 'rgba(16, 185, 129, 0.15)', maxVal, w, h);
+      // Draw Line Blocked (Red)
+      drawLine(chartDataBlocked, '#ef4444', 'rgba(239, 68, 68, 0.15)', maxVal, w, h);
+    }
+
+    function drawLine(data, strokeColor, fillColor, maxVal, w, h) {
+      const stepX = w / (data.length - 1);
+      ctx.beginPath();
+      data.forEach((val, i) => {
+        const x = i * stepX;
+        const y = h - (val / maxVal) * (h - 20) - 10;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.strokeStyle = strokeColor;
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+
+      // Fill area under line
+      ctx.lineTo(w, h);
+      ctx.lineTo(0, h);
+      ctx.closePath();
+      ctx.fillStyle = fillColor;
+      ctx.fill();
+    }
+
+    // Fetch Admin Config
+    async function loadConfig() {
+      try {
+        const res = await fetch('/api/admin/config');
+        const data = await res.json();
+
+        document.getElementById('stat-strategy').innerText = data.activeStrategy;
+
+        const container = document.getElementById('strategy-container');
+        container.innerHTML = '';
+
+        data.availableStrategies.forEach(s => {
+          const btn = document.createElement('div');
+          btn.className = `strategy-btn ${s.id === data.activeStrategy ? 'active' : ''}`;
+          btn.onclick = () => switchStrategy(s.id);
+          btn.innerHTML = `
+            <div class="strategy-name">${s.name}</div>
+            <div class="strategy-desc">${s.description}</div>
+          `;
+          container.appendChild(btn);
+        });
+      } catch (err) {
+        console.error('Failed to load admin config', err);
+      }
+    }
+
+    // Switch Strategy
+    async function switchStrategy(strategyId) {
+      try {
+        await fetch('/api/admin/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ strategy: strategyId })
+        });
+        await loadConfig();
+        fetchRedisKeys();
+      } catch (err) {
+        console.error('Failed to switch strategy', err);
+      }
+    }
+
+    // Trigger Traffic Simulator
+    async function triggerBurst(count) {
+      const tier = document.getElementById('sim-tier').value;
+      try {
+        await fetch('/api/admin/simulate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ count, tier, delayMs: 40 })
+        });
+        fetchRedisKeys();
+      } catch (err) {
+        console.error('Simulation failed', err);
+      }
+    }
+
+    function toggleAutoLoop() {
+      const btn = document.getElementById('auto-loop-btn');
+      if (autoLoopInterval) {
+        clearInterval(autoLoopInterval);
+        autoLoopInterval = null;
+        btn.innerText = '🔄 Auto Loop Traffic (OFF)';
+        btn.classList.remove('btn-danger');
+      } else {
+        triggerBurst(10);
+        autoLoopInterval = setInterval(() => triggerBurst(10), 3000);
+        btn.innerText = '⏹ Stop Auto Loop (ON)';
+        btn.classList.add('btn-danger');
+      }
+    }
+
+    // Fetch Redis Keys
+    async function fetchRedisKeys() {
+      try {
+        const res = await fetch('/api/admin/redis-keys');
+        const data = await res.json();
+
+        const tbody = document.getElementById('redis-keys-body');
+        tbody.innerHTML = '';
+
+        if (!data.keys || data.keys.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="3" style="color: var(--text-muted);">No active rate limit keys</td></tr>';
+          return;
+        }
+
+        data.keys.forEach(k => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td style="color: var(--accent-cyan);">${k.key}</td>
+            <td>${typeof k.val === 'object' ? JSON.stringify(k.val) : k.val}</td>
+            <td>${k.ttl}s</td>
+          `;
+          tbody.appendChild(tr);
+        });
+      } catch (err) {
+        console.error('Failed to fetch Redis keys', err);
+      }
+    }
+
+    // Connect SSE Event Stream
+    function initSSE() {
+      const evtSource = new EventSource('/api/admin/events');
+
+      let tickAllowed = 0;
+      let tickBlocked = 0;
+
+      // Update Chart every second
+      setInterval(() => {
+        chartDataAllowed.shift();
+        chartDataAllowed.push(tickAllowed);
+        chartDataBlocked.shift();
+        chartDataBlocked.push(tickBlocked);
+        tickAllowed = 0;
+        tickBlocked = 0;
+        drawChart();
+      }, 1000);
+
+      evtSource.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+
+        if (msg.type === 'history') {
+          msg.events.reverse().forEach(ev => handleTelemetryEvent(ev, false));
+        } else if (msg.type === 'event') {
+          handleTelemetryEvent(msg.event, true);
+          if (msg.event.allowed) tickAllowed++;
+          else tickBlocked++;
+        }
+      };
+    }
+
+    function handleTelemetryEvent(ev, animate) {
+      if (ev.allowed) allowedCount++;
+      else blockedCount++;
+
+      document.getElementById('stat-allowed').innerText = allowedCount;
+      document.getElementById('stat-blocked').innerText = blockedCount;
+
+      const total = allowedCount + blockedCount;
+      const rate = total > 0 ? ((blockedCount / total) * 100).toFixed(1) : 0;
+      document.getElementById('stat-block-rate').innerText = rate + '%';
+
+      const tbody = document.getElementById('log-body');
+
+      if (tbody.children.length === 1 && tbody.children[0].children.length === 1) {
+        tbody.innerHTML = '';
+      }
+
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><span class="tag ${ev.allowed ? 'tag-200' : 'tag-429'}">${ev.statusCode} ${ev.allowed ? 'OK' : '429'}</span></td>
+        <td><span class="tag tag-tier">${ev.tier}</span></td>
+        <td>${ev.resetInSeconds}s</td>
+      `;
+
+      tbody.insertBefore(tr, tbody.firstChild);
+
+      if (tbody.children.length > 50) {
+        tbody.removeChild(tbody.lastChild);
+      }
+
+      document.getElementById('log-count').innerText = `${total} requests`;
+    }
+
+    // Init
+    loadConfig();
+    fetchRedisKeys();
+    initSSE();
+    setInterval(fetchRedisKeys, 5000);
+  </script>
+
+</body>
+</html>

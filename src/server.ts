@@ -1,61 +1,51 @@
 import express from 'express';
+import path from 'path';
 import config from './config';
 import { getRedisClient, closeRedisConnection } from './services/redisClient';
-import { FixedWindowStrategy } from './algorithms/FixedWindowStrategy';
-import { SlidingWindowStrategy } from './algorithms/SlidingWindowStrategy';
-import { IRateLimiterStrategy } from './algorithms/IRateLimiterStrategy';
+import { DynamicConfigService } from './services/dynamicConfig';
 import { createRateLimiterMiddleware } from './middleware/rateLimiter';
 import { createApiRouter } from './routes/api';
+import { createAdminRouter } from './routes/admin';
 import metricsRouter from './routes/metrics';
 import logger from './utils/logger';
 
 async function bootstrap() {
   const app = express();
 
-  // Trust proxy headers (needed for correct req.ip behind a load balancer)
+  // Trust proxy headers for load balancers / cloud VMs
   app.set('trust proxy', 1);
   app.use(express.json());
+
+  // Serve Dashboard UI (static files)
+  const publicPath = path.join(__dirname, '../public');
+  app.use(express.static(publicPath));
+
+  app.get(['/', '/dashboard'], (_req, res) => {
+    res.sendFile(path.join(publicPath, 'dashboard/index.html'));
+  });
 
   // --- Connect to Redis ---
   const redisClient = await getRedisClient();
 
-  // --- Select Rate Limiting Algorithm (Strategy Pattern) ---
-  // Swap algorithms without changing any other code — just the env var
-  let strategy: IRateLimiterStrategy;
-  let strategyName: string;
+  // --- Dynamic Config Service (Pluggable Strategies & Multi-Tenant Tiers) ---
+  const dynamicConfigService = new DynamicConfigService(redisClient);
+  const { name: activeStrategyName } = dynamicConfigService.getActiveStrategy();
 
-  if (config.rateLimit.strategy === 'sliding-window') {
-    strategy = new SlidingWindowStrategy(
-      redisClient,
-      config.rateLimit.limit,
-      config.rateLimit.windowSeconds
-    );
-    strategyName = 'sliding-window';
-  } else {
-    strategy = new FixedWindowStrategy(
-      redisClient,
-      config.rateLimit.limit,
-      config.rateLimit.windowSeconds
-    );
-    strategyName = 'fixed-window';
-  }
-
-  logger.info(`Rate limiter initialized`, {
-    strategy: strategyName,
+  logger.info('Rate limiter initialized', {
+    strategy: activeStrategyName,
     limit: config.rateLimit.limit,
     windowSeconds: config.rateLimit.windowSeconds,
   });
 
-  // --- Mount Routes ---
-
-  // /metrics — Prometheus scrape endpoint (NO rate limiting)
+  // --- Mount Admin & Unprotected Routes ---
   app.use('/metrics', metricsRouter);
+  app.use('/api/admin', createAdminRouter(redisClient, dynamicConfigService));
 
-  // /api/health — Health check (NO rate limiting — monitors must always work)
+  // Health check endpoint (Unprotected)
   app.use('/api', createApiRouter(redisClient));
 
-  // /api/v1/* — Protected routes (rate limiting APPLIED here)
-  const rateLimiter = createRateLimiterMiddleware(strategy, strategyName);
+  // --- Protected API Routes (Rate Limiting Applied) ---
+  const rateLimiter = createRateLimiterMiddleware(dynamicConfigService);
   app.use('/api/v1', rateLimiter, createApiRouter(redisClient));
 
   // --- 404 Handler ---
@@ -65,16 +55,17 @@ async function bootstrap() {
 
   // --- Start Server ---
   const server = app.listen(config.port, () => {
-    logger.info(`API Gateway started`, { port: config.port, env: config.nodeEnv });
+    logger.info('API Gateway & Control Center started', { port: config.port, env: config.nodeEnv });
     logger.info('Available endpoints', {
+      dashboard: `http://localhost:${config.port}/dashboard`,
       protected: `http://localhost:${config.port}/api/v1/data`,
       health:    `http://localhost:${config.port}/api/health`,
       metrics:   `http://localhost:${config.port}/metrics`,
+      admin:     `http://localhost:${config.port}/api/admin/config`,
     });
   });
 
   // --- Graceful Shutdown ---
-  // Allows in-flight requests to complete before closing connections
   const shutdown = async (signal: string) => {
     logger.info(`${signal} received — starting graceful shutdown`);
     server.close(async () => {
@@ -83,15 +74,14 @@ async function bootstrap() {
       process.exit(0);
     });
 
-    // Force exit after 10 seconds if something hangs
     setTimeout(() => {
       logger.error('Forced exit after timeout');
       process.exit(1);
     }, 10_000);
   };
 
-  process.on('SIGTERM', () => shutdown('SIGTERM')); // Docker stop
-  process.on('SIGINT',  () => shutdown('SIGINT'));  // Ctrl+C
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT',  () => shutdown('SIGINT'));
 }
 
 bootstrap().catch((err) => {

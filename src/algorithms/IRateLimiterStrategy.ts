@@ -12,15 +12,12 @@ export interface RateLimiterResult {
 /**
  * Strategy Interface — the contract every algorithm must implement.
  *
- * This is the Strategy Design Pattern:
- * - The middleware (Context) calls strategy.consume(key)
- * - It doesn't know OR care if it's Fixed Window or Sliding Window
- * - Swap algorithms by changing one line in server.ts (or an env var)
- *
- * Interview talking point:
- * "I used the Strategy pattern so rate-limiting algorithms are pluggable
- * without touching the middleware or any other business logic."
+ * Pluggable Strategy Pattern:
+ * - Fixed Window Counter
+ * - Sliding Window Log (Sorted Set)
+ * - Token Bucket
+ * - Sliding Window Counter (Atomic Lua Script)
  */
 export interface IRateLimiterStrategy {
-  consume(key: string): Promise<RateLimiterResult>;
+  consume(key: string, customLimit?: number, customWindowSeconds?: number): Promise<RateLimiterResult>;
 }

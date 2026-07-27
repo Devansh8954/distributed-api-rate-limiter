@@ -11,8 +11,8 @@
     "test:unit": "jest tests/unit --forceExit",
     "test:integration": "jest tests/integration --forceExit",
     "test:coverage": "jest --coverage --forceExit",
-    "lint": "eslint 'src/**/*.ts' 'tests/**/*.ts'",
-    "lint:fix": "eslint 'src/**/*.ts' 'tests/**/*.ts' --fix"
+    "lint": "eslint \"src/**/*.ts\" \"tests/**/*.ts\"",
+    "lint:fix": "eslint \"src/**/*.ts\" \"tests/**/*.ts\" --fix"
   },
   "keywords": ["rate-limiter", "api-gateway", "redis", "express", "typescript"],
   "author": "",

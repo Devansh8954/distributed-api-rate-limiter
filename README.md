@@ -1,74 +1,82 @@
-# API Rate Limiter — Cloud Gateway
+# Visual API Gateway & Distributed Rate Limiter Suite
 
-A production-grade distributed API Gateway that protects backend services from DDoS attacks and API abuse using Redis-backed rate limiting.
+A production-grade distributed API Gateway and real-time visual control platform built with **TypeScript, Node.js, Express, and Redis**. Features dynamic algorithm hot-swapping, multi-tenant tier limits, atomic Redis Lua scripting, and an interactive dark-mode developer control panel with live traffic simulation.
 
 [![CI Pipeline](https://github.com/Devansh8954/distributed-api-rate-limiter/actions/workflows/ci.yml/badge.svg)](https://github.com/Devansh8954/distributed-api-rate-limiter/actions)
 
 ---
 
-## 🌐 Live Demo (Deployed on GCP)
+## 🌐 Live Demo & Interactive Dashboard (Deployed on GCP)
 
-**Try it now →** `http://136.115.81.182:3000/api/v1/data`
+**Control Center Dashboard →** `http://136.115.81.182:3000/dashboard`
+**Protected API Endpoint →** `http://136.115.81.182:3000/api/v1/data`
 
-Hit that URL more than 10 times and watch it automatically block you with `429 Too Many Requests`.
-That's rate limiting — the same system Stripe, GitHub, and Google use to protect their APIs.
-
-<details>
-<summary>More endpoints</summary>
-
-| Endpoint | Description |
-|---|---|
-| `/api/health` | Health check — confirms Redis is connected |
-| `/metrics` | Prometheus metrics (for monitoring systems) |
-| `http://136.115.81.182:8081` | Redis Commander — visualize live rate-limit counters |
-
-</details>
+* Open the dashboard to launch synthetic request bursts (e.g. 50 req/sec), watch live visual charts block requests in `429 Too Many Requests`, inspect Redis keys and TTLs in real-time, and switch rate-limiting algorithms on the fly!
 
 ---
 
-## What It Does
+## 🚀 Key Platform Features
 
-Every request to `/api/v1/*` is intercepted by a rate-limiting middleware that:
-1. Extracts the client's IP address
-2. Queries Redis: *"How many requests has this IP made in the last 60 seconds?"*
-3. **If under limit** → allows the request, increments the counter
-4. **If over limit** → returns `429 Too Many Requests`
-
-```
-Client → Express Gateway → Rate Limiter Middleware → Redis
-                                    ↓
-                         allowed? → Route Handler → 200 OK
-                         blocked? → 429 Too Many Requests
-```
+- **Interactive Control Center & Traffic Simulator:** Real-time dark-mode developer dashboard with live canvas throughput graphs, custom burst generators, and real-time Server-Sent Events (SSE) telemetry.
+- **4 Pluggable Rate-Limiting Algorithms (Strategy Pattern):**
+  1. **Fixed Window Counter** — Fast $O(1)$ atomic counter.
+  2. **Sliding Window Log** — Sub-second timestamp precision via Redis Sorted Sets (`ZSET`).
+  3. **Token Bucket** — Dynamic token refill handling burst traffic smoothly.
+  4. **Sliding Window Counter (Atomic Lua Script)** — Cloudflare/Stripe pattern executing inside Redis via Lua (`EVAL`) for sub-millisecond execution and minimal memory footprint.
+- **Multi-Tenant Tiering:** Differentiate traffic policies by client tier headers (`Free`: 10 req/min, `Pro`: 60 req/min, `Enterprise`: 300 req/min).
+- **Runtime Hot-Swapping:** Change algorithms or global thresholds dynamically via REST API or UI without server restarts.
+- **Prometheus Telemetry & Observability:** `/metrics` endpoint exposing gateway telemetry.
+- **Fail-Open Resilience:** Designed to fail open if Redis drops, preserving application uptime.
+- **Containerized Deployment:** Multi-stage `Dockerfile` and `docker-compose.yml` configured for GCP / cloud production.
 
 ---
 
-## Features
+## System Architecture
 
-- **Two rate-limiting algorithms** — Fixed Window Counter (O(1)) and Sliding Window Log (O(log N)), switchable via environment variable
-- **Strategy design pattern** — algorithms are pluggable without changing middleware code
-- **Prometheus metrics** — `/metrics` endpoint for observability
-- **Structured logging** — JSON logs via Winston, colorized in development
-- **Graceful shutdown** — handles SIGTERM/SIGINT without dropping requests
-- **Fail-open design** — if Redis goes down, requests are allowed through (configurable)
-- **Health check endpoint** — `/api/health` pings Redis and reports status
-- **Full test suite** — unit tests (Redis mocked) + integration tests (supertest)
-- **GitHub Actions CI/CD** — lint → test → docker build on every push
+```
+ ┌────────────────────────────────────────────────────────────────────────┐
+ │                      INTERACTIVE DASHBOARD UI                         │
+ │        Live Throughput Charts · Algorithm Switcher · Traffic Simulator  │
+ └───────────────────────────────────┬────────────────────────────────────┘
+                                     │ HTTP / SSE Stream
+                                     ▼
+ ┌────────────────────────────────────────────────────────────────────────┐
+ │                         EXPRESS GATEWAY API                            │
+ │  /dashboard       → Static UI & Control Panel                          │
+ │  /api/v1/*        → Rate-Limited Endpoints (Multi-Tenant & Tiered)    │
+ │  /api/admin/*     → Config & Redis Key Inspector APIs                   │
+ │  /api/admin/events→ Real-Time Telemetry Stream (Server-Sent Events)    │
+ └───────────────────────────────────┬────────────────────────────────────┘
+                                     │
+           ┌─────────────────────────┴─────────────────────────┐
+           ▼                                                   ▼
+ ┌───────────────────────────────────┐               ┌───────────────────┐
+ │       STRATEGY REGISTRY           │               │ TELEMETRY ENGINE  │
+ │  • Fixed Window                   │               │ • SSE Broadcast   │
+ │  • Sliding Window Log             │               │ • Prometheus      │
+ │  • Token Bucket                   │               │ • Winston Logs    │
+ │  • Sliding Window Counter (Lua)   │               └───────────────────┘
+ └─────────────────┬─────────────────┘
+                   │
+                   ▼
+ ┌────────────────────────────────────────────────────────────────────────┐
+ │                         REDIS DATA STORE                               │
+ │   Atomic Lua Scripts · Key TTLs · Token Buckets · Tier Rule Hash      │
+ └────────────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
 ## Tech Stack
 
-| Technology | Role |
-|---|---|
-| **TypeScript** | Language — type safety, better developer experience |
-| **Express.js** | HTTP framework |
-| **Redis** | In-memory counter store (Fixed Window) / Sorted Set store (Sliding Window) |
-| **Winston** | Structured logging |
-| **Prometheus (prom-client)** | Metrics & observability |
-| **Jest + supertest** | Unit & integration testing |
-| **Docker + Docker Compose** | Containerization & orchestration |
-| **GitHub Actions** | CI/CD pipeline |
+| Layer | Technology | Purpose |
+|---|---|---|
+| **Language** | TypeScript 5.x | Type safety, strategy interfaces, OOP patterns |
+| **Framework** | Express.js 4.x | HTTP Gateway router & SSE streaming |
+| **In-Memory Store** | Redis 7.x | Atomic counters, ZSET logs, token buckets, and Lua scripts |
+| **Telemetry** | Prometheus & Winston | Metrics aggregation & structured JSON logging |
+| **Testing** | Jest + Supertest | Unit & integration testing |
+| **Containers** | Docker & Docker Compose | Containerization & service orchestration |
 
 ---
 
@@ -82,193 +90,40 @@ cd distributed-api-rate-limiter
 docker compose up --build
 ```
 
-That's it. Three services start:
-- `http://localhost:3000` — API Gateway
-- `http://localhost:8081` — Redis Commander (visual Redis UI)
-- `http://localhost:8001` — RedisInsight (Redis UI built into redis-stack)
+Access services locally:
+- **Control Dashboard:** `http://localhost:3000/dashboard`
+- **Protected Endpoint:** `http://localhost:3000/api/v1/data`
+- **Prometheus Metrics:** `http://localhost:3000/metrics`
+- **Redis Commander UI:** `http://localhost:8081`
 
 ---
 
 ## API Reference
 
-| Endpoint | Rate Limited? | Description |
-|---|---|---|
-| `GET /api/v1/data` | ✅ Yes | Protected data endpoint |
-| `GET /api/health` | ❌ No | Health check (pings Redis) |
-| `GET /metrics` | ❌ No | Prometheus metrics |
-
-### Response Headers (every request)
-
-```
-X-RateLimit-Limit:     10          Max requests per window
-X-RateLimit-Remaining: 7           Requests left in current window
-X-RateLimit-Reset:     43          Seconds until window resets
-X-RateLimit-Strategy:  fixed-window  Algorithm in use
-```
-
-### On 429 responses, additionally:
-```
-Retry-After: 43
-```
-
-### 200 OK Response
-```json
-{
-  "message": "Success! Here is your data.",
-  "timestamp": "2026-07-25T17:00:00.000Z",
-  "server": "api-rate-limiter-gateway",
-  "version": "v1"
-}
-```
-
-### 429 Too Many Requests Response
-```json
-{
-  "error": "Too Many Requests",
-  "message": "You have exceeded the rate limit. Please slow down.",
-  "retryAfter": 43
-}
-```
-
----
-
-## Rate Limiting Algorithms
-
-### Fixed Window Counter (default)
-- Divides time into fixed 60-second windows
-- Redis `INCR` + `EXPIRE` — **O(1)** time and space
-- ⚠️ Has a boundary burst problem at window edges
-- Best for: general-purpose API endpoints
-
-### Sliding Window Log
-- Stores a timestamped log of every request in a Redis Sorted Set
-- No boundary burst — perfectly accurate
-- **O(log N)** time, **O(N)** space per IP
-- Best for: auth endpoints, payment APIs
-
-Switch via environment variable (no code change needed):
-```env
-RATE_LIMIT_STRATEGY=fixed-window   # default
-RATE_LIMIT_STRATEGY=sliding-window
-```
-
----
-
-## Configuration
-
-Copy `.env.example` to `.env` and customize:
-
-```env
-PORT=3000
-NODE_ENV=development
-REDIS_URL=redis://localhost:6379
-RATE_LIMIT=10
-WINDOW_SECONDS=60
-RATE_LIMIT_STRATEGY=fixed-window
-```
-
----
-
-## Development
-
-```bash
-npm install          # Install dependencies
-cp .env.example .env # Set up environment
-npm run dev          # Start with hot-reload (requires Redis running)
-npm test             # Run all tests
-npm run test:coverage # Tests + coverage report
-npm run lint         # Lint TypeScript files
-```
-
-Run Redis locally for development:
-```bash
-docker run -d --name redis-dev -p 6379:6379 redis:alpine
-```
+| Endpoint | Method | Rate Limited? | Description |
+|---|---|---|---|
+| `/dashboard` | `GET` | ❌ No | Visual Control Center UI |
+| `/api/v1/data` | `GET` | ✅ Yes | Rate-limited protected API |
+| `/api/admin/config` | `GET / POST` | ❌ No | Get or update active strategy & limits |
+| `/api/admin/redis-keys` | `GET` | ❌ No | Inspect live Redis rate-limit keys & TTLs |
+| `/api/admin/simulate` | `POST` | ❌ No | Server-side traffic burst simulator |
+| `/api/admin/events` | `GET` | ❌ No | Telemetry Server-Sent Events (SSE) stream |
+| `/metrics` | `GET` | ❌ No | Prometheus metrics scrape endpoint |
 
 ---
 
 ## Testing
 
 ```bash
-npm run test:unit        # Unit tests (no Redis needed — mocked)
-npm run test:integration # Integration tests
-npm run test:coverage    # Coverage report → ./coverage/
-```
-
-### Manual Rate Limit Test
-
-**PowerShell:**
-```powershell
-1..15 | ForEach-Object {
-    $r = Invoke-WebRequest http://localhost:3000/api/v1/data -ErrorAction SilentlyContinue
-    "Request $_: $($r.StatusCode)"
-}
-```
-
-**Bash:**
-```bash
-for i in {1..15}; do
-  echo -n "Request $i: "
-  curl -s -o /dev/null -w "%{http_code}\n" http://localhost:3000/api/v1/data
-done
-```
-
-Expected: `200 200 200 200 200 200 200 200 200 200 429 429 429 429 429`
-
----
-
-## Project Structure
-
-```
-├── src/
-│   ├── algorithms/          # Rate limiting algorithms
-│   │   ├── IRateLimiterStrategy.ts  # Strategy interface
-│   │   ├── FixedWindowStrategy.ts   # Fixed Window Counter
-│   │   └── SlidingWindowStrategy.ts # Sliding Window Log
-│   ├── middleware/
-│   │   └── rateLimiter.ts   # Express middleware
-│   ├── routes/
-│   │   ├── api.ts           # /api/v1/data, /api/health
-│   │   └── metrics.ts       # /metrics (Prometheus)
-│   ├── services/
-│   │   └── redisClient.ts   # Singleton Redis connection
-│   ├── utils/
-│   │   └── logger.ts        # Winston logger
-│   ├── config.ts            # Environment config
-│   └── server.ts            # App entry point
-├── tests/
-│   ├── unit/                # Isolated algorithm tests
-│   └── integration/         # Full request flow tests
-├── Dockerfile               # Multi-stage build
-└── docker-compose.yml       # Gateway + Redis + Redis UI
+npm run test:unit        # Run unit tests (Redis mocked)
+npm run test:integration # Run integration tests
+npm run test:coverage    # Generate test coverage report
 ```
 
 ---
 
----
+## Key Interview Talking Points
 
-## GCP Deployment
-
-See `docs/production-deployment.md` for the full step-by-step guide.
-
-**Live instance running on:** GCP Compute Engine `us-central1-a` (e2-micro, always-free tier)
-
-```bash
-# On your GCP VM after cloning the repo:
-docker compose up -d --build
-
-# Test from your local machine:
-curl http://136.115.81.182:3000/api/health
-```
-
----
-
-## Design Decisions
-
-**Why Redis over in-memory storage?** In-memory counters only work on a single server. Redis is a shared external store that all server instances connect to, making rate limiting work correctly across horizontally scaled deployments.
-
-**Why fail-open on Redis errors?** Availability > protection for general APIs. If Redis goes down, we log the error and allow requests through rather than taking down the entire API.
-
-**Why the Strategy pattern?** Allows swapping rate-limiting algorithms via environment variable with zero changes to middleware, routes, or any other business logic. New algorithm = new class implementing `IRateLimiterStrategy`.
-
-**Why multi-stage Docker build?** Separates build tooling (TypeScript compiler, dev dependencies) from the runtime image. Result is a ~200MB runtime image instead of ~800MB.
+* **Why Redis Lua Scripts?** Sliding Window Counter implemented via atomic Redis Lua script ensures zero race conditions across multi-node Express deployments without network multi-roundtrip overhead.
+* **Why Strategy Pattern?** Decouples middleware logic from algorithm execution. Switching from Fixed Window to Sliding Window Counter requires 0 middleware changes.
+* **Multi-Tenant Gateway Design:** Supports tier-based rate limiting (`x-client-tier` header) allowing SLA guarantees for Free vs. Enterprise clients.
