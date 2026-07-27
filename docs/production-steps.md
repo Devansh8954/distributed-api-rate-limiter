@@ -11,6 +11,13 @@ export PROJECT_ID=$(gcloud config get-value project)
 export SA_EMAIL="github-deployer@${PROJECT_ID}.iam.gserviceaccount.com"
 export REPO="YOUR_GITHUB_USERNAME/distributed-api-rate-limiter" # <-- CHANGE THIS
 
+# 1. Create the Docker Repository in Artifact Registry
+gcloud artifacts repositories create api-rate-limiter \
+  --repository-format=docker \
+  --location=asia-south1 \
+  --description="Docker repository for API Rate Limiter"
+
+# 2. Setup Security and Identity Pool
 gcloud iam service-accounts create github-deployer --display-name="GitHub Actions Deployer"
 gcloud projects add-iam-policy-binding $PROJECT_ID --member="serviceAccount:${SA_EMAIL}" --role="roles/artifactregistry.writer"
 gcloud projects add-iam-policy-binding $PROJECT_ID --member="serviceAccount:${SA_EMAIL}" --role="roles/run.admin"
