@@ -2,28 +2,37 @@ import { RedisClientType } from 'redis';
 import { IRateLimiterStrategy, RateLimiterResult } from './IRateLimiterStrategy';
 
 /**
- * Sliding Window Counter Strategy using Redis Lua Script
+ * Sliding Window Counter Algorithm using Redis Lua Script
  *
  * ─── How it works ───────────────────────────────────────────────────────────
- * Enterprise pattern used by Cloudflare & Stripe.
- * Combines low memory of Fixed Window with high accuracy of Sliding Window Log.
+ * Enterprise rate-limiting pattern used by Cloudflare and Stripe.
+ * Combines the memory efficiency of Fixed Window ($O(1)$) with the boundary-burst
+ * smooth accuracy of Sliding Window Log.
  *
- * It uses two Redis keys:
- *  - Current Window key: swc:{key}:{currentWindowId}
- *  - Previous Window key: swc:{key}:{previousWindowId}
+ * Instead of storing individual request logs in memory, it tracks request counts
+ * in two adjacent fixed windows (Current Window & Previous Window) and computes a
+ * weighted estimate of requests in the sliding time window:
  *
- * Formula:
- *  weightedPrevCount = prevCount * ((windowSeconds - timeIntoCurrentWindow) / windowSeconds)
- *  estimatedCount = weightedPrevCount + currentCount
+ *   Weight = (WindowSeconds - TimeIntoCurrentWindow) / WindowSeconds
+ *   EstimatedCount = (PrevWindowCount × Weight) + CurrentWindowCount
  *
- * Executed atomically via Redis Lua script (EVAL) for 100% thread safety and sub-1ms speed.
+ * ─── Why Lua Script? ────────────────────────────────────────────────────────
+ * Executing this calculation via a single atomic Lua script (`EVAL`) directly
+ * inside Redis guarantees:
+ *   1. Zero race conditions across distributed server nodes.
+ *   2. Single network round-trip (<1ms latency overhead).
+ *   3. $O(1)$ fixed memory overhead per IP.
+ *
+ *  Interview talking point:
+ *  "I implemented Sliding Window Counter with Redis Lua scripting to achieve
+ *  sub-millisecond execution and linear scale without maintaining full request logs."
  */
 export class SlidingWindowCounterLuaStrategy implements IRateLimiterStrategy {
   private readonly client: RedisClientType;
   private readonly defaultLimit: number;
   private readonly defaultWindowSeconds: number;
 
-  // Atomic Lua script executed inside Redis
+  // Atomic Lua script executed inside Redis engine
   private static readonly LUA_SCRIPT = `
     local currentKey = KEYS[1]
     local prevKey    = KEYS[2]
@@ -90,7 +99,7 @@ export class SlidingWindowCounterLuaStrategy implements IRateLimiterStrategy {
         resetInSeconds: Math.max(1, resetInNum),
       };
     } catch {
-      // Fallback if EVAL has an issue
+      // Fail-open fallback if Redis script execution encounters an unexpected error
       return {
         allowed: true,
         limit,

@@ -2,17 +2,28 @@ import { RedisClientType } from 'redis';
 import { IRateLimiterStrategy, RateLimiterResult } from './IRateLimiterStrategy';
 
 /**
- * Token Bucket Strategy
+ * Token Bucket Algorithm
  *
  * ─── How it works ───────────────────────────────────────────────────────────
- * A bucket has a max capacity of `limit` tokens.
- * Tokens are added to the bucket at a constant rate (limit / windowSeconds tokens/sec).
- * When a request arrives, 1 token is consumed.
- * If 0 tokens are remaining, the request is rejected with 429.
+ * A virtual bucket holds a maximum capacity of `limit` tokens.
+ * Tokens are continuously refilled into the bucket at a constant rate:
  *
- * ─── Redis Implementation ───────────────────────────────────────────────────
- * Key: tb:{key} holding a JSON object or Hash { tokens, lastRefill }
- * Fast, precise, handles dynamic burst traffic smoothly.
+ *     Refill Rate = limit / windowSeconds (tokens/sec)
+ *
+ * When a request arrives:
+ *  1. Calculate time elapsed since last request.
+ *  2. Add refilled tokens to the bucket (capped at max capacity).
+ *  3. If tokens ≥ 1: consume 1 token, allow request (200 OK).
+ *  4. If tokens < 1: block request (429 Too Many Requests).
+ *
+ * ─── Trade-offs ─────────────────────────────────────────────────────────────
+ *  PRO: Ideal for handling bursty traffic (allows brief burst up to max capacity).
+ *  CON: Requires tracking token state + last refill timestamp per client.
+ *
+ *  Interview talking point:
+ *  "Token Bucket is widely used in API Gateways (like AWS API Gateway and Stripe)
+ *  because it smoothly supports legitimate client burst traffic while enforcing
+ *  a strict sustained rate."
  */
 export class TokenBucketStrategy implements IRateLimiterStrategy {
   private readonly client: RedisClientType;
@@ -45,7 +56,7 @@ export class TokenBucketStrategy implements IRateLimiterStrategy {
         lastRefill = now;
       }
 
-      // Calculate how many tokens should be added based on time elapsed
+      // Calculate newly refilled tokens based on time elapsed
       const timeElapsedSeconds = (now - lastRefill) / 1000;
       const refillRate = limit / windowSeconds;
       const tokensToAdd = timeElapsedSeconds * refillRate;
@@ -61,7 +72,7 @@ export class TokenBucketStrategy implements IRateLimiterStrategy {
 
     const resetInSeconds = Math.max(1, Math.ceil((limit - tokens) / (limit / windowSeconds)));
 
-    // Save updated token state into Redis with TTL
+    // Persist updated token bucket state into Redis
     await this.client.set(
       redisKey,
       JSON.stringify({ tokens, lastRefill }),
