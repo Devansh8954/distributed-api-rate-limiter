@@ -118,9 +118,8 @@ jobs:
             RATE_LIMIT=100
             WINDOW_SECONDS=60
             RATE_LIMIT_STRATEGY=sliding-window-counter
-          secrets: |
-            REDIS_URL=REDIS_URL:latest
-            ADMIN_API_KEY=ADMIN_API_KEY:latest
+            REDIS_URL=${{ secrets.REDIS_URL }}
+            ADMIN_API_KEY=${{ secrets.ADMIN_API_KEY }}
           flags: |
             --allow-unauthenticated
             --min-instances=0
