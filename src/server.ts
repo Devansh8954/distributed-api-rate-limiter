@@ -14,8 +14,13 @@ import logger from './utils/logger';
 async function bootstrap() {
   const app = express();
 
-  // Security headers (X-Frame-Options, CSP, HSTS, etc.)
-  app.use(helmet());
+  // Security headers (X-Frame-Options, HSTS, X-Content-Type-Options, etc.)
+  // Disable CSP so inline scripts and Google Fonts in public/dashboard/index.html run cleanly
+  app.use(
+    helmet({
+      contentSecurityPolicy: false,
+    })
+  );
 
   // Trust proxy headers for load balancers / cloud VMs
   app.set('trust proxy', 1);
