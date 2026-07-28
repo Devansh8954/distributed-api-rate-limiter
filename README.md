@@ -2,7 +2,7 @@
 
 A production-grade distributed API Gateway and real-time visual control platform built with **TypeScript, Node.js, Express, and Redis**. Features dynamic algorithm hot-swapping, multi-tenant tier limits, atomic Redis Lua scripting, and an interactive dark-mode developer control panel with live traffic simulation.
 
-[![CI Pipeline](https://github.com/Devansh8954/distributed-api-rate-limiter/actions/workflows/ci.yml/badge.svg)](https://github.com/Devansh8954/distributed-api-rate-limiter/actions)
+[![CI/CD Deploy to GCP Cloud Run](https://github.com/Devansh8954/distributed-api-rate-limiter/actions/workflows/deploy.yml/badge.svg)](https://github.com/Devansh8954/distributed-api-rate-limiter/actions)
 
 ---
 
