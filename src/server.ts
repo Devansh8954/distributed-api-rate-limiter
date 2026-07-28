@@ -5,6 +5,7 @@ import config from './config';
 import { getRedisClient, closeRedisConnection } from './services/redisClient';
 import { DynamicConfigService } from './services/dynamicConfig';
 import { createRateLimiterMiddleware } from './middleware/rateLimiter';
+import { adminAuth } from './middleware/adminAuth';
 import { createApiRouter } from './routes/api';
 import { createAdminRouter } from './routes/admin';
 import metricsRouter from './routes/metrics';
@@ -43,11 +44,16 @@ async function bootstrap() {
     windowSeconds: config.rateLimit.windowSeconds,
   });
 
-  // --- Mount Admin & Unprotected Routes ---
+  // --- Prometheus Metrics (no auth — scraper needs open access) ---
   app.use('/metrics', metricsRouter);
-  app.use('/api/admin', createAdminRouter(redisClient, dynamicConfigService));
 
-  // Health check endpoint (Unprotected)
+  // --- Admin Control Plane (protected by X-Admin-Key header auth) ---
+  // adminAuth checks the X-Admin-Key header against ADMIN_API_KEY env var.
+  // In production: missing key → 503. Wrong key → 401. Correct key → allowed.
+  // In development: allowed without a key for local convenience.
+  app.use('/api/admin', adminAuth, createAdminRouter(redisClient, dynamicConfigService));
+
+  // --- Health Check & Public Routes (not rate-limited) ---
   app.use('/api', createApiRouter(redisClient));
 
   // --- Protected API Routes (Rate Limiting Applied) ---
@@ -72,6 +78,9 @@ async function bootstrap() {
   });
 
   // --- Graceful Shutdown ---
+  // SIGTERM: sent by Cloud Run / Kubernetes when scaling down or redeploying
+  // SIGINT:  sent by Ctrl+C in local development
+  // We close the HTTP server first (stops accepting new requests), then close Redis.
   const shutdown = async (signal: string) => {
     logger.info(`${signal} received — starting graceful shutdown`);
     server.close(async () => {
@@ -80,6 +89,7 @@ async function bootstrap() {
       process.exit(0);
     });
 
+    // Safety net: force-kill if clean shutdown takes too long (e.g. hung Redis drain)
     setTimeout(() => {
       logger.error('Forced exit after timeout');
       process.exit(1);

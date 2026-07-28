@@ -1,3 +1,4 @@
+import { RedisClientType } from 'redis';
 import { SlidingWindowCounterLuaStrategy } from '../../src/algorithms/SlidingWindowCounterLuaStrategy';
 
 const mockRedisClient = {
@@ -11,7 +12,7 @@ describe('SlidingWindowCounterLuaStrategy', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    strategy = new SlidingWindowCounterLuaStrategy(mockRedisClient as any, LIMIT, WINDOW);
+    strategy = new SlidingWindowCounterLuaStrategy(mockRedisClient as unknown as RedisClientType, LIMIT, WINDOW);
   });
 
   it('should allow request when Lua script returns allowed = 1', async () => {

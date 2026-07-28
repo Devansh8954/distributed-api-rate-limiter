@@ -1,3 +1,4 @@
+import { RedisClientType } from 'redis';
 import { SlidingWindowStrategy } from '../../src/algorithms/SlidingWindowStrategy';
 
 // Mock pipeline object returned by client.multi()
@@ -20,7 +21,7 @@ describe('SlidingWindowStrategy', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    strategy = new SlidingWindowStrategy(mockRedisClient as any, LIMIT, WINDOW);
+    strategy = new SlidingWindowStrategy(mockRedisClient as unknown as RedisClientType, LIMIT, WINDOW);
   });
 
   describe('When under the rate limit', () => {

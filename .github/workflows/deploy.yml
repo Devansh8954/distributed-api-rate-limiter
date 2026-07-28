@@ -1,91 +1,125 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# CD: Deploy to GCP Cloud Run
+# Continuous Integration & Automated Deployment to GCP Cloud Run
 #
-# Trigger: Fires ONLY after the CI Pipeline succeeds on `main`.
-#          This guarantees: lint + test + Docker smoke-test must all pass
-#          before a single byte reaches production.
-#
-# Auth: Uses Workload Identity Federation (WIF) — the modern GCP keyless approach.
-#       No service-account JSON keys are stored anywhere. GitHub's OIDC token is
-#       exchanged directly with GCP for a short-lived credential. Zero long-lived secrets.
-#
-# Infrastructure:
-#   - Image registry : GCP Artifact Registry
-#   - Runtime        : Cloud Run (serverless, scales to 0 when idle)
-#   - Redis          : Set REDIS_URL secret to Upstash / Redis Cloud / Memorystore URL
-#
-# Required GitHub Secrets (repo → Settings → Secrets → Actions):
-#   GCP_PROJECT_ID       Your GCP project ID (e.g. "my-project-123456")
-#   GCP_WIF_PROVIDER     Workload Identity Provider resource name
-#                        e.g. projects/123/locations/global/workloadIdentityPools/github/providers/github
-#   GCP_WIF_SA           Service Account email that WIF will impersonate
-#                        e.g. github-deployer@my-project.iam.gserviceaccount.com
-#   REDIS_URL            Redis connection string — Upstash / Redis Cloud / Memorystore
-#                        e.g. redis://default:password@hostname:6379
-#   ADMIN_API_KEY        Secret key for /api/admin/* endpoints
-#                        Generate: openssl rand -hex 32
+# Trigger: Whenever code is pushed to `main`, GitHub Actions will automatically:
+#          1. Run ESLint & TypeScript type-checking
+#          2. Execute unit & integration test suite (Jest)
+#          3. Build Docker container & run health smoke test
+#          4. Authenticate keylessly to GCP via Workload Identity Federation (WIF)
+#          5. Deploy updated Docker image to GCP Cloud Run
+#          6. Perform live post-deployment health check ping
 # ─────────────────────────────────────────────────────────────────────────────
-name: Deploy to GCP Cloud Run
+name: CI/CD Deploy to GCP Cloud Run
 
 on:
-  # Only deploy after the full CI pipeline passes on main
-  workflow_run:
-    workflows: ["CI Pipeline"]
-    types: [completed]
+  push:
     branches: [main]
-
-  # Manual trigger — useful for re-deploying a hotfix without a new commit
   workflow_dispatch:
 
-# ─── Shared environment variables ────────────────────────────────────────────
 env:
-  PROJECT_ID:   ${{ secrets.GCP_PROJECT_ID }}
-  REGION:       asia-south1                   # Mumbai — closest to India
-  SERVICE:      api-rate-limiter
-  REGISTRY:     asia-south1-docker.pkg.dev
-  REPO:         api-rate-limiter               # Artifact Registry repository name
-  IMAGE:        asia-south1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/api-rate-limiter/gateway
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: asia-south1
+  SERVICE: api-rate-limiter
+  REGISTRY: asia-south1-docker.pkg.dev
+  IMAGE: asia-south1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/api-rate-limiter/gateway
 
 jobs:
-  # ─── Gate: only proceed if CI passed (not skipped or failed) ─────────────
-  check-ci:
-    name: Verify CI passed
+  # ─── Job 1: Static Analysis & Type Checking ─────────────────────────────────
+  lint-and-typecheck:
+    name: 🔍 Lint & Type Check
     runs-on: ubuntu-latest
-    if: >
-      github.event_name == 'workflow_dispatch' ||
-      github.event.workflow_run.conclusion == 'success'
     steps:
-      - name: CI status OK
-        run: echo "CI pipeline passed — proceeding to deploy"
+      - uses: actions/checkout@v4
 
-  # ─── Job: Build → Push → Deploy ──────────────────────────────────────────
-  deploy:
-    name: Build & Deploy
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint static analysis
+        run: npm run lint
+
+      - name: TypeScript strict type check
+        run: npx tsc --noEmit
+
+  # ─── Job 2: Test Suite Execution ───────────────────────────────────────────
+  test:
+    name: 🧪 Unit & Integration Tests
     runs-on: ubuntu-latest
-    needs: check-ci
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run test suite with coverage
+        run: npm run test:coverage
+
+  # ─── Job 3: Docker Smoke Test ───────────────────────────────────────────────
+  docker-smoke-test:
+    name: 🐳 Docker Container Smoke Test
+    runs-on: ubuntu-latest
+    needs: [lint-and-typecheck, test]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t api-rate-limiter:${{ github.sha }} .
+
+      - name: Verify container health
+        run: |
+          docker network create test-net
+          docker run -d --name test-redis --network test-net redis:7-alpine
+          sleep 3
+
+          docker run -d --name test-container \
+            --network test-net \
+            -e REDIS_URL=redis://test-redis:6379 \
+            -e NODE_ENV=production \
+            -p 3000:3000 \
+            api-rate-limiter:${{ github.sha }}
+
+          sleep 12
+
+          curl --fail --retry 3 --retry-delay 3 http://localhost:3000/api/health \
+            || (echo "--- Gateway logs ---" && docker logs test-container && exit 1)
+
+          docker rm -f test-container test-redis
+          docker network rm test-net
+
+  # ─── Job 4: Build, Push & Deploy to GCP Cloud Run ───────────────────────────
+  deploy:
+    name: 🚀 Deploy to GCP Cloud Run
+    runs-on: ubuntu-latest
+    needs: [lint-and-typecheck, test, docker-smoke-test]
     permissions:
       contents: read
-      id-token: write   # Required for Workload Identity Federation OIDC exchange
+      id-token: write   # Required for Keyless Workload Identity Federation (WIF) OIDC token exchange
 
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
 
-      # ── Keyless GCP authentication via Workload Identity Federation ────────
-      # No JSON key stored in GitHub. GitHub's OIDC token is exchanged directly
-      # with GCP IAM for a short-lived credential scoped to this job only.
+      # Keyless GCP authentication via Workload Identity Federation (OIDC)
       - name: Authenticate to GCP (WIF — keyless)
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
-          service_account:            ${{ secrets.GCP_WIF_SA }}
+          service_account: ${{ secrets.GCP_WIF_SA }}
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
         with:
           project_id: ${{ env.PROJECT_ID }}
 
-      # ── Docker → Artifact Registry ─────────────────────────────────────────
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker ${{ env.REGISTRY }} --quiet
 
@@ -103,16 +137,13 @@ jobs:
           docker push "${{ env.IMAGE }}:${{ github.sha }}"
           docker push "${{ env.IMAGE }}:latest"
 
-      # ── Deploy to Cloud Run ────────────────────────────────────────────────
-      # Pin image to the exact SHA — never deploy `latest` to production.
-      # This makes every deployment 100% reproducible and rollback-safe.
       - name: Deploy to Cloud Run
         id: deploy
         uses: google-github-actions/deploy-cloudrun@v2
         with:
-          service:    ${{ env.SERVICE }}
-          region:     ${{ env.REGION }}
-          image:      ${{ env.IMAGE }}:${{ github.sha }}
+          service: ${{ env.SERVICE }}
+          region: ${{ env.REGION }}
+          image: ${{ env.IMAGE }}:${{ github.sha }}
           env_vars: |
             NODE_ENV=production
             RATE_LIMIT=100
@@ -130,24 +161,20 @@ jobs:
             --concurrency=80
             --timeout=30s
 
-      # ── Post-deploy smoke test ─────────────────────────────────────────────
-      # Hits the health check endpoint on the live Cloud Run URL.
-      # If this fails, the pipeline fails and the bad deploy is flagged immediately.
-      - name: Smoke test — health check
+      - name: Live health check ping
         run: |
-          echo "Service URL: ${{ steps.deploy.outputs.url }}"
+          echo "Live URL: ${{ steps.deploy.outputs.url }}"
           curl --fail --retry 5 --retry-delay 3 --retry-connrefused \
             "${{ steps.deploy.outputs.url }}/api/health" \
             | grep -q '"status":"ok"' \
-            && echo "✅ Health check passed" \
-            || (echo "❌ Health check failed" && exit 1)
+            && echo "✅ Live health check passed!" \
+            || (echo "❌ Live health check failed" && exit 1)
 
-      # ── Print deployment summary ───────────────────────────────────────────
-      - name: Print deployment summary
+      - name: Summary
         run: |
-          echo "### ✅ Deployment Successful" >> $GITHUB_STEP_SUMMARY
+          echo "### 🚀 Automatic Deployment Complete" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "| Resource | URL / Details |" >> $GITHUB_STEP_SUMMARY
           echo "|---|---|" >> $GITHUB_STEP_SUMMARY
           echo "| **Service** | ${{ env.SERVICE }} |" >> $GITHUB_STEP_SUMMARY
           echo "| **Region** | ${{ env.REGION }} |" >> $GITHUB_STEP_SUMMARY

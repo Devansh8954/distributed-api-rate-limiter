@@ -1,15 +1,13 @@
-name: CI Pipeline
+name: CI Pipeline (Pull Requests)
 
 on:
-  push:
-    branches: [main, develop]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
-  # ─── Job 1: Lint & Type Check ─────────────────────────────────────────────
-  lint:
-    name: Lint & Type Check
+  lint-and-typecheck:
+    name: 🔍 Lint & Type Check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,15 +20,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run ESLint
+      - name: Run ESLint static analysis
         run: npm run lint
 
-      - name: TypeScript type check
+      - name: TypeScript strict type check
         run: npx tsc --noEmit
 
-  # ─── Job 2: Run Tests ─────────────────────────────────────────────────────
   test:
-    name: Unit & Integration Tests
+    name: 🧪 Unit & Integration Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -43,36 +40,25 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run all tests with coverage
+      - name: Run test suite with coverage
         run: npm run test:coverage
 
-      - name: Upload coverage report
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-report
-          path: coverage/
-
-  # ─── Job 3: Docker Build ──────────────────────────────────────────────────
-  docker-build:
-    name: Docker Build
+  docker-smoke-test:
+    name: 🐳 Docker Container Smoke Test
     runs-on: ubuntu-latest
-    needs: [lint, test]   # Only build if lint + tests pass
+    needs: [lint-and-typecheck, test]
     steps:
       - uses: actions/checkout@v4
 
       - name: Build Docker image
         run: docker build -t api-rate-limiter:${{ github.sha }} .
 
-      - name: Verify container starts and reaches healthy state
+      - name: Verify container health
         run: |
-          # Create isolated network so gateway can reach Redis by hostname
           docker network create test-net
-
-          # Start Redis
           docker run -d --name test-redis --network test-net redis:7-alpine
           sleep 3
 
-          # Start the gateway connected to the same network
           docker run -d --name test-container \
             --network test-net \
             -e REDIS_URL=redis://test-redis:6379 \
@@ -80,13 +66,11 @@ jobs:
             -p 3000:3000 \
             api-rate-limiter:${{ github.sha }}
 
-          # Give the app time to connect to Redis and start listening
-          sleep 15
+          sleep 12
 
-          # Health check must return 200 — if not, print logs and fail
           curl --fail --retry 3 --retry-delay 3 http://localhost:3000/api/health \
             || (echo "--- Gateway logs ---" && docker logs test-container && exit 1)
 
-          # Cleanup
           docker rm -f test-container test-redis
           docker network rm test-net
+

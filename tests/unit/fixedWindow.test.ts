@@ -1,3 +1,4 @@
+import { RedisClientType } from 'redis';
 import { FixedWindowStrategy } from '../../src/algorithms/FixedWindowStrategy';
 
 // Mock the entire Redis client — we don't want a real Redis in unit tests
@@ -15,7 +16,7 @@ describe('FixedWindowStrategy', () => {
   beforeEach(() => {
     // Reset all mocks before each test
     jest.clearAllMocks();
-    strategy = new FixedWindowStrategy(mockRedisClient as any, LIMIT, WINDOW);
+    strategy = new FixedWindowStrategy(mockRedisClient as unknown as RedisClientType, LIMIT, WINDOW);
   });
 
   describe('First request in a window', () => {

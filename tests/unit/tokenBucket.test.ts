@@ -1,3 +1,4 @@
+import { RedisClientType } from 'redis';
 import { TokenBucketStrategy } from '../../src/algorithms/TokenBucketStrategy';
 
 /**
@@ -19,7 +20,7 @@ describe('TokenBucketStrategy', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    strategy = new TokenBucketStrategy(mockRedisClient as any, LIMIT, WINDOW);
+    strategy = new TokenBucketStrategy(mockRedisClient as unknown as RedisClientType, LIMIT, WINDOW);
   });
 
   // ── Core allow / block ────────────────────────────────────────────────────
