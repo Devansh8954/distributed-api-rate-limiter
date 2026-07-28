@@ -9,6 +9,8 @@ coverage
 *.log
 npm-debug.log*
 docs
+INTERVIEW.md
+interview.md
 tests
 README.md
 .eslintrc.js

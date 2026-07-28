@@ -1,14 +1,27 @@
-# Visual API Gateway & Distributed Rate Limiter Suite
+<div align="center">
 
-A production-grade distributed API Gateway and real-time visual control platform built with **TypeScript, Node.js, Express, and Redis**. Features dynamic algorithm hot-swapping, multi-tenant tier limits, atomic Redis Lua scripting, and an interactive dark-mode developer control panel with live traffic simulation.
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:0f0c29,50:6f42c1,100:24243e&height=220&section=header&text=Distributed%20Rate%20Limiter&fontSize=50&fontColor=ffffff&fontAlignY=38&desc=API%20Gateway%20%7C%20TypeScript%20%7C%20Redis%20Lua%20%7C%20GCP%20Cloud%20Run&descAlignY=60&descSize=16" width="100%"/>
 
-[![CI/CD Deploy to GCP Cloud Run](https://github.com/Devansh8954/distributed-api-rate-limiter/actions/workflows/deploy.yml/badge.svg)](https://github.com/Devansh8954/distributed-api-rate-limiter/actions)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![Node.js](https://img.shields.io/badge/Node.js-20.x-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org)
+[![Redis](https://img.shields.io/badge/Redis-7.x-DC382D?style=for-the-badge&logo=redis&logoColor=white)](https://redis.io)
+[![Express](https://img.shields.io/badge/Express.js-4.x-000000?style=for-the-badge&logo=express&logoColor=white)](https://expressjs.com)
+[![Docker](https://img.shields.io/badge/Docker-Containerized-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
+[![GCP Cloud Run](https://img.shields.io/badge/GCP_Cloud_Run-Deployed-4285F4?style=for-the-badge&logo=googlecloud&logoColor=white)](https://cloud.google.com/run)
+[![Live Control Center](https://img.shields.io/badge/Live_Control_Center-6f42c1?style=for-the-badge)](https://api-rate-limiter-266670750120.asia-south1.run.app/dashboard)
+[![CI/CD WIF](https://img.shields.io/badge/CI%2FCD-GitHub_Actions_WIF-2088FF?style=for-the-badge&logo=githubactions&logoColor=white)](.github/workflows)
+
+> A production-grade distributed API Gateway and real-time visual control platform built with **TypeScript, Node.js, Express, and Redis**. Features dynamic algorithm hot-swapping, multi-tenant tier limits, atomic Redis Lua scripting, and an interactive dark-mode developer control panel with live traffic simulation.
+
+### 🌐 [Live Control Center Dashboard → https://api-rate-limiter-266670750120.asia-south1.run.app/dashboard](https://api-rate-limiter-266670750120.asia-south1.run.app/dashboard)
+
+</div>
 
 ---
 
 ## 🌐 Live Demo & Interactive Dashboard (Deployed on GCP Cloud Run)
 
-**Control Center Dashboard →** `https://api-rate-limiter-266670750120.asia-south1.run.app/dashboard`
+**Control Center Dashboard →** `https://api-rate-limiter-266670750120.asia-south1.run.app/dashboard`  
 **Protected API Endpoint →** `https://api-rate-limiter-266670750120.asia-south1.run.app/api/v1/data`
 
 * Open the dashboard to launch synthetic request bursts (e.g. 50 req/sec), watch live visual charts block requests in `429 Too Many Requests`, inspect Redis keys and TTLs in real-time, and switch rate-limiting algorithms on the fly!
@@ -122,8 +135,13 @@ npm run test:coverage    # Generate test coverage report
 
 ---
 
-## Key Interview Talking Points
+## 🎯 Key Architecture & SDE Interview Guide
+
+Looking for system design decisions, Redis Lua race-condition trade-offs, and FAANG-level technical interview answers for this project?
+
+👉 **[Read the Full SDE Technical Interview Prep Guide (docs/interview.md)](docs/interview.md)**
 
 * **Why Redis Lua Scripts?** Sliding Window Counter implemented via atomic Redis Lua script ensures zero race conditions across multi-node Express deployments without network multi-roundtrip overhead.
 * **Why Strategy Pattern?** Decouples middleware logic from algorithm execution. Switching from Fixed Window to Sliding Window Counter requires 0 middleware changes.
 * **Multi-Tenant Gateway Design:** Supports tier-based rate limiting (`x-client-tier` header) allowing SLA guarantees for Free vs. Enterprise clients.
+

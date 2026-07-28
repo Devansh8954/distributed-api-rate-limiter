@@ -42,6 +42,7 @@
       min-height: 100vh;
       padding: 2rem;
       line-height: 1.5;
+      -webkit-text-size-adjust: 100%;
     }
 
     .container {
@@ -50,6 +51,7 @@
       display: flex;
       flex-direction: column;
       gap: 1.75rem;
+      width: 100%;
     }
 
     /* --- Header --- */
@@ -63,6 +65,7 @@
       border: 1px solid var(--card-border);
       border-radius: 16px;
       box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+      gap: 1rem;
     }
 
     .logo-group {
@@ -82,12 +85,14 @@
       font-weight: 800;
       font-size: 1.25rem;
       box-shadow: 0 0 20px var(--primary-glow);
+      flex-shrink: 0;
     }
 
     h1 {
-      font-size: 1.5rem;
+      font-size: clamp(1.15rem, 3vw, 1.5rem);
       font-weight: 700;
       letter-spacing: -0.02em;
+      line-height: 1.2;
     }
 
     .subtitle {
@@ -106,6 +111,8 @@
       border-radius: 9999px;
       font-size: 0.8rem;
       font-weight: 600;
+      white-space: nowrap;
+      flex-shrink: 0;
     }
 
     .status-dot {
@@ -126,7 +133,7 @@
     /* --- Stats Grid --- */
     .stats-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
       gap: 1.25rem;
     }
 
@@ -139,6 +146,7 @@
       display: flex;
       flex-direction: column;
       gap: 0.5rem;
+      min-width: 0;
     }
 
     .stat-label {
@@ -147,29 +155,27 @@
       text-transform: uppercase;
       letter-spacing: 0.05em;
       font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     .stat-value {
-      font-size: 2rem;
+      font-size: clamp(1.4rem, 4vw, 2rem);
       font-weight: 800;
       font-family: var(--font-mono);
+      word-break: break-word;
     }
 
     .val-allowed { color: var(--success); text-shadow: 0 0 15px var(--success-glow); }
     .val-blocked { color: var(--danger); text-shadow: 0 0 15px var(--danger-glow); }
-    .val-active { color: var(--accent-cyan); }
+    .val-active { color: var(--accent-cyan); font-size: clamp(1.1rem, 3.5vw, 1.8rem); }
 
     /* --- Main Layout Grid --- */
     .dashboard-grid {
       display: grid;
       grid-template-columns: 1fr 340px;
       gap: 1.5rem;
-    }
-
-    @media (max-width: 1024px) {
-      .dashboard-grid {
-        grid-template-columns: 1fr;
-      }
     }
 
     .card {
@@ -181,6 +187,7 @@
       display: flex;
       flex-direction: column;
       gap: 1.25rem;
+      min-width: 0;
     }
 
     .card-title {
@@ -189,12 +196,14 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
+      flex-wrap: wrap;
+      gap: 0.5rem;
     }
 
     /* --- Strategy Cards --- */
     .strategy-cards {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
       gap: 1rem;
     }
 
@@ -210,6 +219,7 @@
       display: flex;
       flex-direction: column;
       gap: 0.4rem;
+      min-height: 44px;
     }
 
     .strategy-btn:hover {
@@ -253,8 +263,11 @@
       transition: all 0.2s;
       display: inline-flex;
       align-items: center;
+      justify-content: center;
       gap: 0.5rem;
       box-shadow: 0 4px 12px var(--primary-glow);
+      min-height: 44px;
+      touch-action: manipulation;
     }
 
     .btn:hover {
@@ -284,7 +297,8 @@
       padding: 0.6rem 0.9rem;
       border-radius: 8px;
       font-family: var(--font-sans);
-      font-size: 0.85rem;
+      font-size: 16px; /* 16px avoids iOS auto-zoom on input tap */
+      min-height: 44px;
     }
 
     /* --- Canvas Chart --- */
@@ -302,6 +316,7 @@
     /* --- Logs & Key Tables --- */
     .table-container {
       overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
       max-height: 280px;
     }
 
@@ -310,6 +325,7 @@
       border-collapse: collapse;
       font-size: 0.825rem;
       font-family: var(--font-mono);
+      min-width: 280px;
     }
 
     th {
@@ -319,11 +335,13 @@
       border-bottom: 1px solid var(--card-border);
       font-size: 0.75rem;
       text-transform: uppercase;
+      white-space: nowrap;
     }
 
     td {
       padding: 0.6rem 0.8rem;
       border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      word-break: break-all;
     }
 
     .tag {
@@ -331,6 +349,8 @@
       border-radius: 6px;
       font-size: 0.75rem;
       font-weight: 600;
+      display: inline-block;
+      white-space: nowrap;
     }
 
     .tag-200 { background: rgba(16, 185, 129, 0.2); color: var(--success); }
@@ -339,6 +359,105 @@
 
     /* Flex helpers */
     .flex-row { display: flex; align-items: center; gap: 0.75rem; }
+
+    /* --- Responsive Media Queries --- */
+    @media (max-width: 1024px) {
+      .dashboard-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 768px) {
+      body {
+        padding: 1rem;
+      }
+
+      .container {
+        gap: 1.25rem;
+      }
+
+      header {
+        flex-direction: column;
+        align-items: flex-start;
+        padding: 1.25rem 1.25rem;
+        gap: 0.85rem;
+      }
+
+      .status-badge {
+        align-self: flex-start;
+      }
+
+      .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.85rem;
+      }
+
+      .stat-card {
+        padding: 1rem;
+      }
+
+      .card {
+        padding: 1.15rem;
+      }
+
+      .simulator-panel {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .simulator-panel label {
+        margin-bottom: -0.25rem;
+      }
+
+      .simulator-panel select,
+      .simulator-panel .btn {
+        width: 100%;
+      }
+
+      .chart-container {
+        height: 200px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      body {
+        padding: 0.65rem;
+      }
+
+      header {
+        padding: 1rem;
+        border-radius: 12px;
+      }
+
+      .logo-icon {
+        width: 38px;
+        height: 38px;
+        font-size: 1.1rem;
+      }
+
+      .stats-grid {
+        grid-template-columns: 1fr;
+        gap: 0.75rem;
+      }
+
+      .strategy-cards {
+        grid-template-columns: 1fr;
+      }
+
+      .card {
+        padding: 0.9rem;
+        border-radius: 12px;
+      }
+
+      .card-title {
+        font-size: 1rem;
+      }
+
+      th, td {
+        padding: 0.5rem 0.6rem;
+        font-size: 0.78rem;
+      }
+    }
   </style>
 </head>
 <body>

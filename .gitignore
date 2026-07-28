@@ -5,15 +5,16 @@ coverage/
 *.log
 .DS_Store
 
-# ─── PRIVATE LEARNING DOCS ────────────────────────────────────────────────
-# The docs/ folder contains personal learning notes and interview Q&A.
-# To keep it PRIVATE (not pushed to GitHub), uncomment the line below:
-#
+# ─── PRIVATE LEARNING & INTERVIEW MATERIALS ─────────────────────────────
+# Keep interview notes, docs, and learning materials strictly private locally
 docs/
-#
-# To make it private permanently:
-#   1. Uncomment "docs/" above
-#   2. Run: git rm -r --cached docs/
-#   3. Run: git commit -m "remove docs from public repo"
-#   4. Push to GitHub — docs/ will no longer appear in your public repo
-#   5. The folder stays on your local machine (only gitignored, not deleted)
+docs/*
+INTERVIEW.md
+interview.md
+*interview*
+*Interview*
+*INTERVIEW*
+materials/
+material/
+*.private
+private/
