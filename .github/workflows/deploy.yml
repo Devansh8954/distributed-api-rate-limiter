@@ -52,10 +52,17 @@ jobs:
       - run: npm ci
       - run: npm run test:coverage
 
+  security-scan:
+    name: Security Vulnerability Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm audit --audit-level=high || true
+
   deploy:
     name: Deploy to Cloud Run
     runs-on: ubuntu-latest
-    needs: test
+    needs: [test, security-scan]
     if: github.event_name == 'push'
     permissions:
       contents: read
