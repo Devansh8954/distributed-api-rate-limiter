@@ -135,11 +135,7 @@ npm run test:coverage    # Generate test coverage report
 
 ---
 
-## 🎯 Key Architecture & SDE Interview Guide
-
-Looking for system design decisions, Redis Lua race-condition trade-offs, and FAANG-level technical interview answers for this project?
-
-👉 **[Read the Full SDE Technical Interview Prep Guide (docs/interview.md)](docs/interview.md)**
+## 🎯 Key Architecture Highlights
 
 * **Why Redis Lua Scripts?** Sliding Window Counter implemented via atomic Redis Lua script ensures zero race conditions across multi-node Express deployments without network multi-roundtrip overhead.
 * **Why Strategy Pattern?** Decouples middleware logic from algorithm execution. Switching from Fixed Window to Sliding Window Counter requires 0 middleware changes.

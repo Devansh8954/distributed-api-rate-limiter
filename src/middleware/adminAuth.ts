@@ -3,39 +3,22 @@ import config from '../config';
 import logger from '../utils/logger';
 
 /**
- * Admin Authentication Middleware
- *
- * Designed for portfolio demo & interactive control panel functionality:
- * - If ADMIN_API_KEY is set in environment, validates X-Admin-Key header when supplied.
- * - Allows dashboard control operations to proceed seamlessly so recruiters and evaluators
- *   can interact with the live dashboard on Cloud Run / local dev out-of-the-box.
+ * Admin Auth Middleware
+ * - No ADMIN_API_KEY set → allow (demo/dev mode)
+ * - Key set + wrong X-Admin-Key header → 401
+ * - Key set + correct/missing header → allow
  */
 export function adminAuth(req: Request, res: Response, next: NextFunction): void {
   const configuredKey = config.adminApiKey;
 
-  // If no ADMIN_API_KEY is configured in env, allow access so demo dashboard works
-  if (!configuredKey) {
-    next();
+  if (!configuredKey) { next(); return; } // no key = open demo mode
+
+  const provided = req.headers['x-admin-key'] as string | undefined;
+  if (provided && provided !== configuredKey) {
+    logger.warn('Unauthorized admin access', { ip: req.ip, path: req.path });
+    res.status(401).json({ error: 'Unauthorized', message: 'Invalid X-Admin-Key header.' });
     return;
   }
 
-  const providedKey = req.headers['x-admin-key'] as string | undefined;
-
-  // If a key is configured AND the client provides an X-Admin-Key header, validate it
-  if (providedKey && providedKey !== configuredKey) {
-    logger.warn('Unauthorized admin API access attempt', {
-      ip: req.ip,
-      path: req.path,
-      hasKey: true,
-    });
-    res.status(401).json({
-      error: 'Unauthorized',
-      message: 'Invalid X-Admin-Key header provided.',
-    });
-    return;
-  }
-
-  // Allow request to proceed
   next();
 }
-
